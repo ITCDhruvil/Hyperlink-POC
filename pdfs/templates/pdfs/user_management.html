@@ -1,0 +1,808 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>User Management - PDF Automation</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f9fafb;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .header {
+            background: white;
+            border-radius: 12px;
+            padding: 24px 32px;
+            margin-bottom: 24px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .header h1 {
+            font-size: 28px;
+            font-weight: 700;
+            color: #111827;
+            margin-bottom: 8px;
+        }
+
+        .header p {
+            color: #6b7280;
+            font-size: 14px;
+        }
+
+        .nav-buttons {
+            display: flex;
+            gap: 12px;
+            margin-top: 16px;
+            flex-wrap: wrap;
+        }
+
+        .nav-btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-decoration: none;
+            display: inline-block;
+        }
+
+        .nav-btn-primary {
+            background: #111827;
+            color: white;
+        }
+
+        .nav-btn-primary:hover {
+            background: #1f2937;
+            color: white;
+        }
+
+        .nav-btn-secondary {
+            background: #f3f4f6;
+            color: #374151;
+        }
+
+        .nav-btn-secondary:hover {
+            background: #e5e7eb;
+            color: #374151;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            gap: 20px;
+            margin-bottom: 24px;
+        }
+
+        .stat-card {
+            background: white;
+            border-radius: 12px;
+            padding: 24px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .stat-number {
+            font-size: 36px;
+            font-weight: 700;
+            margin-bottom: 8px;
+        }
+
+        .stat-number.total {
+            color: #6366f1;
+        }
+
+        .stat-number.admin {
+            color: #f59e0b;
+        }
+
+        .stat-number.active {
+            color: #16a34a;
+        }
+
+        .stat-label {
+            color: #6b7280;
+            font-size: 14px;
+            font-weight: 500;
+        }
+
+        .content-card {
+            background: white;
+            border-radius: 12px;
+            padding: 24px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .content-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 24px;
+        }
+
+        .content-header h2 {
+            font-size: 20px;
+            font-weight: 700;
+            color: #111827;
+        }
+
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-decoration: none;
+            display: inline-block;
+        }
+
+        .btn-dark {
+            background: #111827;
+            color: white;
+        }
+
+        .btn-dark:hover {
+            background: #1f2937;
+            color: white;
+        }
+
+        .btn-sm {
+            padding: 6px 14px;
+            font-size: 13px;
+        }
+
+        .btn-outline {
+            background: white;
+            color: #374151;
+            border: 1px solid #d1d5db;
+        }
+
+        .btn-outline:hover {
+            background: #f3f4f6;
+            color: #374151;
+        }
+
+        .btn-danger {
+            background: #dc2626;
+            color: white;
+            border: none;
+        }
+
+        .btn-danger:hover {
+            background: #b91c1c;
+            color: white;
+        }
+
+        .users-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .users-table th {
+            text-align: left;
+            padding: 12px;
+            background: #f9fafb;
+            font-size: 13px;
+            font-weight: 600;
+            color: #374151;
+            border-bottom: 2px solid #e5e7eb;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        }
+
+        .users-table td {
+            padding: 16px 12px;
+            border-bottom: 1px solid #e5e7eb;
+            font-size: 14px;
+            color: #374151;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        }
+
+        .users-table tr:hover {
+            background: #f9fafb;
+            transition: background 0.2s;
+        }
+
+        .badge {
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            display: inline-block;
+        }
+
+        .badge-admin {
+            background: #dbeafe;
+            color: #1e40af;
+        }
+
+        .badge-user {
+            background: #f3f4f6;
+            color: #374151;
+        }
+
+        .badge-superuser {
+            background: #fef3c7;
+            color: #92400e;
+        }
+
+        .badge-active {
+            background: #dcfce7;
+            color: #166534;
+        }
+
+        .badge-inactive {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        .action-buttons {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        /* Modal Styles */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 9999;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal.active {
+            display: flex;
+        }
+
+        .modal-content {
+            background: white;
+            border-radius: 12px;
+            padding: 32px;
+            max-width: 500px;
+            width: 90%;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+        }
+
+        .modal-header {
+            font-size: 20px;
+            font-weight: 700;
+            color: #111827;
+            margin-bottom: 24px;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-label {
+            font-weight: 600;
+            font-size: 14px;
+            color: #374151;
+            margin-bottom: 8px;
+            display: block;
+        }
+
+        .form-control {
+            width: 100%;
+            padding: 12px 16px;
+            border: 1px solid #d1d5db;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: all 0.2s;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        }
+
+        .form-control:focus {
+            border-color: #111827;
+            outline: none;
+            box-shadow: 0 0 0 3px rgba(17, 24, 39, 0.1);
+        }
+
+        .form-control::placeholder {
+            color: #9ca3af;
+        }
+
+        .form-check {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .form-check input {
+            width: 18px;
+            height: 18px;
+            cursor: pointer;
+        }
+
+        .modal-footer {
+            display: flex;
+            gap: 12px;
+            justify-content: flex-end;
+            margin-top: 24px;
+        }
+
+        .alert {
+            padding: 12px 16px;
+            border-radius: 8px;
+            font-size: 14px;
+            margin-bottom: 20px;
+        }
+
+        .alert-success {
+            background: #dcfce7;
+            color: #166534;
+            border: 1px solid #bbf7d0;
+        }
+
+        .alert-error {
+            background: #fee2e2;
+            color: #991b1b;
+            border: 1px solid #fecaca;
+        }
+
+        .input-group-append {
+            display: flex;
+            gap: 8px;
+        }
+
+        .btn-generate {
+            padding: 12px 16px;
+            background: #6366f1;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            white-space: nowrap;
+        }
+
+        .btn-generate:hover {
+            background: #4f46e5;
+            color: white;
+        }
+
+        .password-group {
+            display: flex;
+            gap: 8px;
+        }
+
+        .password-group .form-control {
+            flex: 1;
+        }
+
+        .credentials-display {
+            background: #f9fafb;
+            padding: 16px;
+            border-radius: 8px;
+            margin: 20px 0;
+            border: 1px solid #e5e7eb;
+        }
+
+        .credential-item {
+            margin-bottom: 12px;
+        }
+
+        .credential-label {
+            font-size: 12px;
+            color: #6b7280;
+            font-weight: 600;
+            text-transform: uppercase;
+            margin-bottom: 4px;
+        }
+
+        .credential-value {
+            font-size: 14px;
+            color: #111827;
+            font-weight: 600;
+            font-family: 'Courier New', 'Consolas', monospace;
+            background: white;
+            padding: 10px 14px;
+            border-radius: 6px;
+            border: 1px solid #d1d5db;
+            word-break: break-all;
+        }
+
+        .warning-box {
+            background: #fef3c7;
+            border-left: 4px solid #f59e0b;
+            padding: 12px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+        }
+
+        .warning-box p {
+            margin: 0;
+            color: #92400e;
+            font-size: 13px;
+            font-weight: 500;
+        }
+
+        .btn-download {
+            background: #16a34a;
+            color: white;
+            border: none;
+        }
+
+        .btn-download:hover {
+            background: #15803d;
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <div class="header">
+            <h1>User Management</h1>
+            <p>Manage users and permissions</p>
+            <div class="nav-buttons">
+                <a href="/" class="nav-btn nav-btn-primary">Back to Processor</a>
+                <a href="/history/" class="nav-btn nav-btn-secondary">View History</a>
+                <a href="{% url 'pdfs:logout' %}" class="nav-btn nav-btn-secondary">Logout</a>
+            </div>
+        </div>
+
+        <!-- Statistics -->
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-number total">{{ total_users }}</div>
+                <div class="stat-label">Total Users</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number admin">{{ admin_users }}</div>
+                <div class="stat-label">Admin Users</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number active">{{ active_users }}</div>
+                <div class="stat-label">Active Users</div>
+            </div>
+        </div>
+
+        <!-- Users Table -->
+        <div class="content-card">
+            <div class="content-header">
+                <h2>All Users</h2>
+                <button class="btn btn-dark" onclick="showCreateUserModal()">+ Create User</button>
+            </div>
+
+            <div id="alertContainer"></div>
+
+            <table class="users-table">
+                <thead>
+                    <tr>
+                        <th>Email</th>
+                        <th>Role</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for user in users %}
+                    <tr data-user-id="{{ user.id }}">
+                        <td>{{ user.email }}</td>
+                        <td>
+                            {% if user.is_superuser %}
+                                <span class="badge badge-superuser">Superuser</span>
+                            {% elif user.is_staff %}
+                                <span class="badge badge-admin">Admin</span>
+                            {% else %}
+                                <span class="badge badge-user">User</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if user.is_active %}
+                                <span class="badge badge-active">Active</span>
+                            {% else %}
+                                <span class="badge badge-inactive">Inactive</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <div class="action-buttons">
+                                {% if not user.is_superuser %}
+                                    {% if user.is_staff %}
+                                        <button class="btn btn-sm btn-outline" onclick="toggleAdmin({{ user.id }})">Demote</button>
+                                    {% else %}
+                                        <button class="btn btn-sm btn-outline" onclick="toggleAdmin({{ user.id }})">Promote</button>
+                                    {% endif %}
+
+                                    {% if user.is_active %}
+                                        <button class="btn btn-sm btn-outline" onclick="toggleActive({{ user.id }})">Deactivate</button>
+                                    {% else %}
+                                        <button class="btn btn-sm btn-outline" onclick="toggleActive({{ user.id }})">Activate</button>
+                                    {% endif %}
+
+                                    <button class="btn btn-sm btn-danger" onclick="deleteUser({{ user.id }}, '{{ user.email }}')">Delete</button>
+                                {% endif %}
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Create User Modal -->
+    <div id="createUserModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">Create New User</div>
+
+            <form id="createUserForm">
+                {% csrf_token %}
+                <div class="form-group">
+                    <label class="form-label">Email Address</label>
+                    <input type="email" class="form-control" id="newUserEmail" required placeholder="user@example.com">
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Password</label>
+                    <div class="password-group">
+                        <input type="text" class="form-control" id="newUserPassword" required placeholder="Minimum 6 characters">
+                        <button type="button" class="btn btn-generate" onclick="generatePassword()">Generate</button>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <div class="form-check">
+                        <input type="checkbox" id="newUserIsAdmin">
+                        <label class="form-label" for="newUserIsAdmin" style="margin-bottom: 0;">Make this user an admin</label>
+                    </div>
+                </div>
+
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline" onclick="hideCreateUserModal()">Cancel</button>
+                    <button type="submit" class="btn btn-dark">Create User</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Success Modal -->
+    <div id="successModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">User Created Successfully!</div>
+
+            <div class="warning-box">
+                <p>⚠️ Please copy and save these credentials somewhere safe. This is the only time you will see the password!</p>
+            </div>
+
+            <div class="credentials-display">
+                <div class="credential-item">
+                    <div class="credential-label">Email</div>
+                    <div class="credential-value" id="successEmail">-</div>
+                </div>
+                <div class="credential-item">
+                    <div class="credential-label">Password</div>
+                    <div class="credential-value" id="successPassword">-</div>
+                </div>
+                <div class="credential-item">
+                    <div class="credential-label">Role</div>
+                    <div class="credential-value" id="successRole">-</div>
+                </div>
+            </div>
+
+            <div class="modal-footer">
+                <button type="button" class="btn btn-download" onclick="downloadCredentials()">📥 Download as JSON</button>
+                <button type="button" class="btn btn-dark" onclick="hideSuccessModal()">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        function getCookie(name) {
+            let cookieValue = null;
+            if (document.cookie && document.cookie !== '') {
+                const cookies = document.cookie.split(';');
+                for (let i = 0; i < cookies.length; i++) {
+                    const cookie = cookies[i].trim();
+                    if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                        cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                        break;
+                    }
+                }
+            }
+            return cookieValue;
+        }
+
+        const csrftoken = getCookie('csrftoken');
+
+        function showAlert(message, type = 'success') {
+            const alertContainer = document.getElementById('alertContainer');
+            alertContainer.innerHTML = `<div class="alert alert-${type}">${message}</div>`;
+            setTimeout(() => {
+                alertContainer.innerHTML = '';
+            }, 5000);
+        }
+
+        function showCreateUserModal() {
+            document.getElementById('createUserModal').classList.add('active');
+        }
+
+        let currentCredentials = null;
+
+        function generatePassword() {
+            const length = 16;
+            const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()_+-=";
+            const upperCase = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+            const lowerCase = "abcdefghijklmnopqrstuvwxyz";
+            const numbers = "0123456789";
+            const special = "!@#$%^&*()_+-=";
+
+            let password = "";
+
+            // Ensure at least one of each type
+            password += upperCase[Math.floor(Math.random() * upperCase.length)];
+            password += lowerCase[Math.floor(Math.random() * lowerCase.length)];
+            password += numbers[Math.floor(Math.random() * numbers.length)];
+            password += special[Math.floor(Math.random() * special.length)];
+
+            // Fill the rest randomly
+            for (let i = password.length; i < length; i++) {
+                password += charset[Math.floor(Math.random() * charset.length)];
+            }
+
+            // Shuffle the password
+            password = password.split('').sort(() => Math.random() - 0.5).join('');
+
+            document.getElementById('newUserPassword').value = password;
+        }
+
+        function hideCreateUserModal() {
+            document.getElementById('createUserModal').classList.remove('active');
+            document.getElementById('createUserForm').reset();
+        }
+
+        function showSuccessModal(email, password, isAdmin) {
+            currentCredentials = {
+                email: email,
+                password: password,
+                role: isAdmin ? 'Admin' : 'User',
+                created_at: new Date().toISOString()
+            };
+
+            document.getElementById('successEmail').textContent = email;
+            document.getElementById('successPassword').textContent = password;
+            document.getElementById('successRole').textContent = isAdmin ? 'Admin' : 'User';
+
+            document.getElementById('successModal').classList.add('active');
+        }
+
+        function hideSuccessModal() {
+            document.getElementById('successModal').classList.remove('active');
+            currentCredentials = null;
+            location.reload();
+        }
+
+        function downloadCredentials() {
+            if (!currentCredentials) return;
+
+            const dataStr = JSON.stringify(currentCredentials, null, 2);
+            const dataBlob = new Blob([dataStr], { type: 'application/json' });
+            const url = URL.createObjectURL(dataBlob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `user-credentials-${currentCredentials.email}.json`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+        }
+
+        document.getElementById('createUserForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const email = document.getElementById('newUserEmail').value;
+            const password = document.getElementById('newUserPassword').value;
+            const isAdmin = document.getElementById('newUserIsAdmin').checked;
+
+            const response = await fetch('/users/create/', {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': csrftoken,
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: new URLSearchParams({
+                    email: email,
+                    password: password,
+                    is_admin: isAdmin
+                })
+            });
+
+            const data = await response.json();
+
+            if (data.success) {
+                hideCreateUserModal();
+                showSuccessModal(email, password, isAdmin);
+            } else {
+                showAlert(data.error, 'error');
+            }
+        });
+
+        async function deleteUser(userId, email) {
+            if (!confirm(`Are you sure you want to delete user ${email}?`)) {
+                return;
+            }
+
+            const response = await fetch(`/users/${userId}/delete/`, {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': csrftoken,
+                }
+            });
+
+            const data = await response.json();
+
+            if (data.success) {
+                showAlert(data.message, 'success');
+                setTimeout(() => location.reload(), 1500);
+            } else {
+                showAlert(data.error, 'error');
+            }
+        }
+
+        async function toggleActive(userId) {
+            const response = await fetch(`/users/${userId}/toggle-active/`, {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': csrftoken,
+                }
+            });
+
+            const data = await response.json();
+
+            if (data.success) {
+                showAlert(data.message, 'success');
+                setTimeout(() => location.reload(), 1500);
+            } else {
+                showAlert(data.error, 'error');
+            }
+        }
+
+        async function toggleAdmin(userId) {
+            const response = await fetch(`/users/${userId}/toggle-admin/`, {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': csrftoken,
+                }
+            });
+
+            const data = await response.json();
+
+            if (data.success) {
+                showAlert(data.message, 'success');
+                setTimeout(() => location.reload(), 1500);
+            } else {
+                showAlert(data.error, 'error');
+            }
+        }
+    </script>
+</body>
+</html>

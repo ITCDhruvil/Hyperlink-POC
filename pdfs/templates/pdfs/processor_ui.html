@@ -1,0 +1,1365 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document Processor</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: white;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+            color: #333;
+        }
+
+        .container-fluid {
+            padding: 0;
+            height: 100vh;
+        }
+
+        .row {
+            margin: 0;
+            height: 100%;
+        }
+
+        .col-6 {
+            padding: 0;
+            height: 100vh;
+            overflow-y: auto;
+        }
+
+        /* LEFT COLUMN */
+        .left-column {
+            background: white;
+            border-right: 1px solid #e0e0e0;
+            padding: 40px;
+        }
+
+        .left-column h1 {
+            font-size: 24px;
+            font-weight: 600;
+            margin-bottom: 10px;
+            color: #333;
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+
+        .nav-link-btn {
+            padding: 8px 16px;
+            border: 1px solid #d1d5db;
+            border-radius: 6px;
+            font-size: 13px;
+            font-weight: 500;
+            color: #374151;
+            background: white;
+            text-decoration: none;
+            transition: all 0.2s;
+            display: inline-block;
+        }
+
+        .nav-link-btn:hover {
+            background: #f3f4f6;
+            border-color: #9ca3af;
+            color: #374151;
+        }
+
+        .upload-box {
+            border: 2px dashed #d0d0d0;
+            border-radius: 8px;
+            padding: 60px 20px;
+            text-align: center;
+            cursor: pointer;
+            background: #fafafa;
+            transition: all 0.3s;
+        }
+
+        .upload-box:hover {
+            border-color: #999;
+            background: #f5f5f5;
+        }
+
+        .upload-box.drag-over {
+            border-color: #666;
+            background: #f0f0f0;
+        }
+
+        .upload-icon {
+            font-size: 48px;
+            color: #999;
+            margin-bottom: 20px;
+        }
+
+        .upload-box p {
+            color: #666;
+            margin: 0;
+            font-size: 16px;
+        }
+
+        .file-info {
+            margin-top: 30px;
+            padding: 20px;
+            background: #f9f9f9;
+            border-radius: 8px;
+            display: none;
+        }
+
+        .file-info h3 {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 15px;
+            color: #333;
+        }
+
+        .info-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid #e0e0e0;
+        }
+
+        .info-row:last-child {
+            border-bottom: none;
+        }
+
+        .info-label {
+            color: #666;
+            font-size: 14px;
+        }
+
+        .info-value {
+            color: #333;
+            font-size: 14px;
+            font-weight: 500;
+        }
+
+        .process-button {
+            width: 100%;
+            padding: 14px;
+            background: #333;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 16px;
+            font-weight: 500;
+            cursor: pointer;
+            margin-top: 20px;
+            transition: background 0.3s;
+        }
+
+        .process-button:hover {
+            background: #555;
+        }
+
+        /* RIGHT COLUMN */
+        .right-column {
+            background: #fafafa;
+            padding: 40px;
+        }
+
+        .right-column h1 {
+            font-size: 24px;
+            font-weight: 600;
+            margin-bottom: 30px;
+            color: #333;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 100px 20px;
+            color: #999;
+        }
+
+        .empty-state-icon {
+            font-size: 64px;
+            margin-bottom: 20px;
+            opacity: 0.3;
+        }
+
+        .empty-state p {
+            font-size: 16px;
+        }
+
+        .results-container {
+            display: none;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px;
+            margin-bottom: 30px;
+        }
+
+        .stat-card {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            text-align: center;
+            border: 1px solid #e0e0e0;
+        }
+
+        .stat-number {
+            font-size: 36px;
+            font-weight: 700;
+            color: #333;
+            margin-bottom: 5px;
+        }
+
+        .stat-number.success {
+            color: #22c55e;
+        }
+
+        .stat-number.warning {
+            color: #f59e0b;
+        }
+
+        .stat-label {
+            font-size: 13px;
+            color: #666;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .success-rate {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            text-align: center;
+            margin-bottom: 30px;
+            border: 1px solid #e0e0e0;
+        }
+
+        .rate-number {
+            font-size: 56px;
+            font-weight: 700;
+            color: #22c55e;
+            margin-bottom: 10px;
+        }
+
+        .rate-label {
+            font-size: 14px;
+            color: #666;
+        }
+
+        .info-section {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            border: 1px solid #e0e0e0;
+        }
+
+        .info-section h3 {
+            font-size: 14px;
+            font-weight: 600;
+            margin-bottom: 12px;
+            color: #333;
+        }
+
+        .info-section p {
+            margin: 8px 0;
+            font-size: 14px;
+            color: #666;
+        }
+
+        .missing-list {
+            margin-top: 20px;
+        }
+
+        .missing-item {
+            background: #fff3cd;
+            padding: 12px 15px;
+            border-radius: 6px;
+            margin-bottom: 10px;
+            font-size: 14px;
+            color: #856404;
+            border-left: 3px solid #f59e0b;
+        }
+
+        .download-button {
+            width: 100%;
+            padding: 14px;
+            background: #22c55e;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 16px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+
+        .download-button:hover {
+            background: #16a34a;
+        }
+
+        /* PROCESSING OVERLAY */
+        .processing-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+        }
+
+        .processing-box {
+            background: white;
+            padding: 40px 60px;
+            border-radius: 8px;
+            text-align: center;
+        }
+
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #333;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .processing-text {
+            font-size: 16px;
+            color: #666;
+        }
+
+        /* Page Range Chips */
+        .range-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 10px;
+            background: #f3f4f6;
+            border: 1px solid #d1d5db;
+            border-radius: 12px;
+            font-size: 13px;
+            color: #374151;
+            font-weight: 500;
+        }
+
+        .range-chip.separator {
+            background: #fef3c7;
+            border-color: #fbbf24;
+            color: #92400e;
+        }
+
+        .range-chip .remove-chip {
+            cursor: pointer;
+            color: #9ca3af;
+            font-weight: bold;
+            padding: 0 4px;
+            transition: color 0.2s;
+        }
+
+        .range-chip .remove-chip:hover {
+            color: #ef4444;
+        }
+
+    </style>
+</head>
+<body>
+    <div class="container-fluid">
+        <div class="row">
+            <!-- LEFT COLUMN: Upload -->
+            <div class="col-6 left-column">
+                <h1>Upload Document</h1>
+
+                <div class="nav-links">
+                    <a href="/history/" class="nav-link-btn">View History</a>
+                    {% if user.is_staff %}
+                    <a href="/users/" class="nav-link-btn">User Management</a>
+                    {% endif %}
+                    <a href="{% url 'pdfs:logout' %}" class="nav-link-btn">Logout</a>
+                </div>
+
+                <div class="mb-3" style="display: flex; gap: 10px;">
+                    <button id="modeOneClick" class="btn btn-dark" type="button" style="flex: 1;">One-Click</button>
+                    <button id="modeAutoLink" class="btn btn-outline-dark" type="button" style="flex: 1;">Auto Link</button>
+                    <button id="modeSplitPdf" class="btn btn-outline-dark" type="button" style="flex: 1;">Split Pdf</button>
+                </div>
+
+                <!-- One-Click Mode Controls -->
+                <div id="oneClickControls" style="display: none;">
+                    <div class="mb-3">
+                        <label class="form-label" style="font-weight: 600;">Word Document</label>
+                        <input type="file" class="form-control" id="oneClickWordFile" accept=".docx">
+                        <div class="form-text">Medical record document with statements</div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label" style="font-weight: 600;">PDF File</label>
+                        <input type="file" class="form-control" id="oneClickPdfFile" accept=".pdf">
+                        <div class="form-text">PDF to be split and uploaded</div>
+                    </div>
+                    <button class="process-button" id="previewBtn" disabled>Preview & Verify</button>
+                </div>
+
+                <!-- Upload Area -->
+                <div class="upload-box" id="uploadBox">
+                    <div class="upload-icon">📄</div>
+                    <p id="uploadHint">Drop Word document here or click to upload</p>
+                    <input type="file" id="fileInput" accept=".docx" style="display: none;">
+                </div>
+
+                <div class="mt-3" id="splitControls" style="display: none;">
+                    <!-- Auto-Extract Section -->
+                    <div class="mb-3 p-3" style="background: #f9fafb; border-radius: 8px; border: 1px solid #e5e7eb;">
+                        <label class="form-label" style="font-weight: 600; font-size: 14px; margin-bottom: 8px;">🚀 Auto-Extract (Optional)</label>
+                        <div class="form-text" style="margin-bottom: 10px;">Upload Word document to auto-extract page ranges</div>
+                        <div class="d-flex gap-2">
+                            <input type="file" class="form-control form-control-sm" id="wordFileInput" accept=".docx" style="flex: 1;">
+                            <button class="btn btn-dark btn-sm" id="autoExtractBtn" disabled style="white-space: nowrap;">Auto-Extract</button>
+                        </div>
+                        <div id="extractionStatus" class="mt-2" style="display: none; font-size: 13px;"></div>
+                    </div>
+
+                    <!-- Enhanced Manual Entry Section -->
+                    <label for="pageRanges" class="form-label" style="font-weight: 600;">Page Ranges</label>
+
+                    <!-- Input with Clear Button -->
+                    <div class="input-group mb-2">
+                        <input type="text" class="form-control" id="pageRanges" placeholder="25-29,31-35;1-2;1-3">
+                        <button class="btn btn-outline-secondary" type="button" id="clearRangesBtn" title="Clear all">
+                            <svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                                <path d="M2.146 2.854a.5.5 0 1 1 .708-.708L8 7.293l5.146-5.147a.5.5 0 0 1 .708.708L8.707 8l5.147 5.146a.5.5 0 0 1-.708.708L8 8.707l-5.146 5.147a.5.5 0 0 1-.708-.708L7.293 8 2.146 2.854Z"/>
+                            </svg>
+                        </button>
+                    </div>
+
+                    <!-- Quick Add Section -->
+                    <div class="mb-3">
+                        <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 8px;">
+                            <span style="font-size: 13px; color: #666; font-weight: 500;">Quick Add:</span>
+                            <input type="number" id="quickStartPage" placeholder="Start" min="1" style="width: 70px; padding: 4px 8px; border: 1px solid #d1d5db; border-radius: 4px; font-size: 13px;">
+                            <span style="color: #666;">to</span>
+                            <input type="number" id="quickEndPage" placeholder="End" min="1" style="width: 70px; padding: 4px 8px; border: 1px solid #d1d5db; border-radius: 4px; font-size: 13px;">
+                            <button class="btn btn-sm btn-dark" id="addRangeBtn" style="padding: 4px 12px; font-size: 13px;">+ Add Range</button>
+                            <button class="btn btn-sm btn-outline-dark" id="addSeparatorBtn" style="padding: 4px 12px; font-size: 13px;" title="Add separator (new PDF)">+ Separator</button>
+                        </div>
+                    </div>
+
+                    <!-- Range Preview Chips -->
+                    <div id="rangePreview" style="display: none; margin-bottom: 10px;">
+                        <div style="font-size: 13px; color: #666; margin-bottom: 6px; font-weight: 500;">Preview:</div>
+                        <div id="rangeChips" style="display: flex; flex-wrap: wrap; gap: 6px;"></div>
+                    </div>
+
+                    <div class="form-text">Use commas to merge pages into one PDF (e.g., 4-5, 7-9, 55). Use ';' or new line to create multiple PDFs (e.g., 1-2; 4-5, 7-9, 55).</div>
+                    <button class="process-button" id="splitBtn" style="margin-top: 12px;">Split PDF</button>
+                </div>
+
+                <!-- File Info -->
+                <div class="file-info" id="fileInfo">
+                    <h3>Document Ready</h3>
+                    <div class="info-row">
+                        <span class="info-label">File:</span>
+                        <span class="info-value" id="fileName"></span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">Size:</span>
+                        <span class="info-value" id="fileSize"></span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">Status:</span>
+                        <span class="info-value">Ready to process</span>
+                    </div>
+
+                    <button class="process-button" id="processBtn">Process Document</button>
+                </div>
+            </div>
+
+            <!-- RIGHT COLUMN: Results -->
+            <div class="col-6 right-column">
+                <h1>Results</h1>
+
+                <!-- Empty State -->
+                <div class="empty-state" id="emptyState">
+                    <div class="empty-state-icon">📊</div>
+                    <p>Upload and process a document to see results</p>
+                </div>
+
+                <!-- Results -->
+                <div class="results-container" id="resultsContainer">
+                    <div id="autoLinkResults">
+                        <!-- Stats Grid -->
+                        <div class="stats-grid" id="statsGrid">
+                            <div class="stat-card">
+                                <div class="stat-number" id="totalCount">0</div>
+                                <div class="stat-label">Total</div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-number success" id="linkedCount">0</div>
+                                <div class="stat-label">Linked</div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-number warning" id="missingCount">0</div>
+                                <div class="stat-label">Missing</div>
+                            </div>
+                        </div>
+
+                        <!-- Success Rate -->
+                        <div class="success-rate" id="successRateBox">
+                            <div class="rate-number" id="successRate">0%</div>
+                            <div class="rate-label">Success Rate</div>
+                        </div>
+
+                        <!-- Info Section -->
+                        <div class="info-section" id="infoSection">
+                            <h3>Processing Details</h3>
+                            <p><strong>Patient:</strong> <span id="patientName">-</span></p>
+                            <p><strong>PDFs Found:</strong> <span id="pdfCount">-</span></p>
+                            <p><strong>Processing Time:</strong> <span id="processingTime">-</span></p>
+                        </div>
+
+                        <!-- Missing PDFs -->
+                        <div class="missing-list" id="missingList" style="display: none;">
+                            <h3 style="font-size: 14px; font-weight: 600; margin-bottom: 12px; color: #333;">Missing PDFs</h3>
+                            <div id="missingItems"></div>
+                        </div>
+
+                        <!-- Download Button -->
+                        <button class="download-button" id="downloadBtn">Download Processed Document</button>
+                    </div>
+
+                    <div id="splitPdfResults" style="display: none; margin-top: 20px;">
+                        <div class="info-section" style="margin-bottom: 12px;">
+                            <h3>Split Details</h3>
+                            <p><strong>Total Pages:</strong> <span id="splitTotalPages">-</span></p>
+                            <p><strong>Ranges:</strong> <span id="splitCount">-</span></p>
+                        </div>
+
+                        <div class="info-section" style="margin-bottom: 12px;">
+                            <h3>Upload Split PDFs</h3>
+                            <div class="mb-2">
+                                <label for="splitPatientName" class="form-label" style="font-weight: 600;">Patient Name</label>
+                                <input type="text" class="form-control" id="splitPatientName" placeholder="e.g., Carl Mayfield">
+                            </div>
+                            <button class="download-button" id="uploadSplitBtn" style="background: #111827;">Upload to Drive</button>
+                        </div>
+
+                        <h3 style="font-size: 14px; font-weight: 600; margin-bottom: 12px; color: #333;">Split PDFs</h3>
+                        <div id="splitFiles"></div>
+                        <button class="download-button" id="downloadAllBtn" style="margin-top: 12px; background: #333;">Download All (ZIP)</button>
+                    </div>
+
+                    <!-- One-Click Results -->
+                    <div id="oneClickResults" style="display: none;">
+                        <!-- Preview/Verification Section -->
+                        <div id="previewSection" style="display: none;">
+                            <div class="info-section" style="margin-bottom: 12px;">
+                                <h3>Verification</h3>
+                                <p><strong>Patient Name:</strong> <span id="oneClickPatientName">-</span></p>
+                                <p><strong>Total Statements:</strong> <span id="oneClickTotalStatements">-</span></p>
+                                <p><strong>PDF Total Pages:</strong> <span id="oneClickPdfPages">-</span></p>
+                            </div>
+
+                            <div class="info-section" style="margin-bottom: 12px;">
+                                <h3>Page Ranges to Split</h3>
+                                <div id="oneClickRangesList" style="max-height: 200px; overflow-y: auto; font-size: 14px; color: #666;"></div>
+                            </div>
+
+                            <div class="mb-3">
+                                <label for="oneClickPatientNameInput" class="form-label" style="font-weight: 600;">Confirm Patient Name</label>
+                                <input type="text" class="form-control" id="oneClickPatientNameInput" placeholder="e.g., Ahmad Al Yabroudi">
+                                <div class="form-text">Edit if needed, or leave as detected</div>
+                            </div>
+
+                            <button class="download-button" id="processAllBtn" style="background: #16a34a;">Process Everything</button>
+                        </div>
+
+                        <!-- Final Results Section -->
+                        <div id="finalResultsSection" style="display: none;">
+                            <div class="success-rate" style="margin-bottom: 20px;">
+                                <div class="rate-number" id="oneClickSuccessRate">100%</div>
+                                <div class="rate-label">Success Rate</div>
+                            </div>
+
+                            <div class="stats-grid" style="grid-template-columns: repeat(2, 1fr); margin-bottom: 20px;">
+                                <div class="stat-card">
+                                    <div class="stat-number success" id="oneClickLinked">0</div>
+                                    <div class="stat-label">Linked</div>
+                                </div>
+                                <div class="stat-card">
+                                    <div class="stat-number" id="oneClickSplits">0</div>
+                                    <div class="stat-label">PDFs Uploaded</div>
+                                </div>
+                            </div>
+
+                            <div class="info-section" style="margin-bottom: 12px;">
+                                <h3>Results</h3>
+                                <p><strong>Patient:</strong> <span id="finalPatientName">-</span></p>
+                                <p><strong>Drive Folder:</strong> <span id="finalDriveFolder">Created</span></p>
+                                <p><strong>Status:</strong> <span style="color: #16a34a;">Complete</span></p>
+                            </div>
+
+                            <button class="download-button" id="downloadFinalBtn">Download Processed Document</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Processing Overlay -->
+    <div class="processing-overlay" id="processingOverlay">
+        <div class="processing-box">
+            <div class="spinner"></div>
+            <div class="processing-text" id="processingText">Processing document...</div>
+            <div style="width: 100%; background: #e0e0e0; border-radius: 4px; margin-top: 20px; height: 8px; display: none;" id="progressBarContainer">
+                <div id="progressBar" style="width: 0%; height: 100%; background: #333; border-radius: 4px; transition: width 0.3s;"></div>
+            </div>
+            <div id="progressPercentage" style="margin-top: 8px; color: #999; font-size: 14px; display: none;">0%</div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        let currentDocumentId = null;
+        let currentMode = 'one_click';
+        let selectedFile = null;
+        let currentSplitJobId = null;
+        let currentSessionId = null;
+        let lastPatientName = '';
+
+        const uploadBox = document.getElementById('uploadBox');
+        const fileInput = document.getElementById('fileInput');
+        const fileInfo = document.getElementById('fileInfo');
+        const processBtn = document.getElementById('processBtn');
+        const splitBtn = document.getElementById('splitBtn');
+        const splitControls = document.getElementById('splitControls');
+        const uploadHint = document.getElementById('uploadHint');
+        const pageRanges = document.getElementById('pageRanges');
+        const modeOneClick = document.getElementById('modeOneClick');
+        const modeAutoLink = document.getElementById('modeAutoLink');
+        const modeSplitPdf = document.getElementById('modeSplitPdf');
+
+        // Auto-extract elements
+        const wordFileInput = document.getElementById('wordFileInput');
+        const autoExtractBtn = document.getElementById('autoExtractBtn');
+        const extractionStatus = document.getElementById('extractionStatus');
+
+        // One-Click elements
+        const oneClickControls = document.getElementById('oneClickControls');
+        const oneClickWordFile = document.getElementById('oneClickWordFile');
+        const oneClickPdfFile = document.getElementById('oneClickPdfFile');
+        const previewBtn = document.getElementById('previewBtn');
+        const oneClickResults = document.getElementById('oneClickResults');
+        const previewSection = document.getElementById('previewSection');
+        const finalResultsSection = document.getElementById('finalResultsSection');
+        const processAllBtn = document.getElementById('processAllBtn');
+        const downloadFinalBtn = document.getElementById('downloadFinalBtn');
+
+        const autoLinkResults = document.getElementById('autoLinkResults');
+        const splitPdfResults = document.getElementById('splitPdfResults');
+        const statsGrid = document.getElementById('statsGrid');
+        const successRateBox = document.getElementById('successRateBox');
+        const infoSection = document.getElementById('infoSection');
+        const splitTotalPages = document.getElementById('splitTotalPages');
+        const splitCount = document.getElementById('splitCount');
+        const splitFiles = document.getElementById('splitFiles');
+        const downloadAllBtn = document.getElementById('downloadAllBtn');
+        const splitPatientName = document.getElementById('splitPatientName');
+        const uploadSplitBtn = document.getElementById('uploadSplitBtn');
+        const emptyState = document.getElementById('emptyState');
+        const resultsContainer = document.getElementById('resultsContainer');
+        const processingOverlay = document.getElementById('processingOverlay');
+        const processingText = document.getElementById('processingText');
+        const progressBar = document.getElementById('progressBar');
+        const progressBarContainer = document.getElementById('progressBarContainer');
+        const progressPercentage = document.getElementById('progressPercentage');
+
+        try {
+            const storedName = sessionStorage.getItem('lastPatientName') || '';
+            if (storedName) lastPatientName = storedName;
+        } catch (e) {
+            // ignore
+        }
+
+        function setMode(mode) {
+            currentMode = mode;
+            currentDocumentId = null;
+            currentSplitJobId = null;
+            currentSessionId = null;
+            selectedFile = null;
+            fileInput.value = '';
+            fileInfo.style.display = 'none';
+            splitPdfResults.style.display = 'none';
+            autoLinkResults.style.display = 'none';
+            oneClickResults.style.display = 'none';
+            previewSection.style.display = 'none';
+            finalResultsSection.style.display = 'none';
+            document.getElementById('missingList').style.display = 'none';
+            emptyState.style.display = 'block';
+            resultsContainer.style.display = 'none';
+
+            // Hide all mode controls first
+            uploadBox.style.display = 'none';
+            splitControls.style.display = 'none';
+            oneClickControls.style.display = 'none';
+
+            if (mode === 'one_click') {
+                modeOneClick.className = 'btn btn-dark';
+                modeAutoLink.className = 'btn btn-outline-dark';
+                modeSplitPdf.className = 'btn btn-outline-dark';
+                oneClickControls.style.display = 'block';
+                oneClickResults.style.display = 'block';
+            } else if (mode === 'auto_link') {
+                modeOneClick.className = 'btn btn-outline-dark';
+                modeAutoLink.className = 'btn btn-dark';
+                modeSplitPdf.className = 'btn btn-outline-dark';
+                uploadBox.style.display = 'block';
+                uploadHint.textContent = 'Drop Word document here or click to upload';
+                fileInput.accept = '.docx';
+                autoLinkResults.style.display = 'block';
+            } else {
+                modeOneClick.className = 'btn btn-outline-dark';
+                modeAutoLink.className = 'btn btn-outline-dark';
+                modeSplitPdf.className = 'btn btn-dark';
+                uploadBox.style.display = 'block';
+                uploadHint.textContent = 'Drop PDF here or click to upload';
+                fileInput.accept = '.pdf';
+                splitControls.style.display = 'block';
+                splitPdfResults.style.display = 'block';
+            }
+        }
+
+        modeOneClick.addEventListener('click', () => setMode('one_click'));
+        modeAutoLink.addEventListener('click', () => setMode('auto_link'));
+        modeSplitPdf.addEventListener('click', () => setMode('split_pdf'));
+
+        // Upload triggers
+        uploadBox.addEventListener('click', () => fileInput.click());
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files[0]) handleFileSelected(e.target.files[0]);
+        });
+
+        // Drag and drop
+        uploadBox.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadBox.classList.add('drag-over');
+        });
+        uploadBox.addEventListener('dragleave', () => {
+            uploadBox.classList.remove('drag-over');
+        });
+        uploadBox.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadBox.classList.remove('drag-over');
+            if (e.dataTransfer.files[0]) handleFileSelected(e.dataTransfer.files[0]);
+        });
+
+        function handleFileSelected(file) {
+            selectedFile = file;
+            if (currentMode === 'auto_link') {
+                uploadFile(file);
+            } else {
+                const lowerName = (file.name || '').toLowerCase();
+                if (!lowerName.endsWith('.pdf')) {
+                    alert('Please upload a .pdf file');
+                    return;
+                }
+                document.getElementById('fileName').textContent = file.name;
+                document.getElementById('fileSize').textContent = formatSize(file.size);
+                fileInfo.style.display = 'block';
+            }
+        }
+
+        // Upload file
+        function uploadFile(file) {
+            const lowerName = (file.name || '').toLowerCase();
+            if (!lowerName.endsWith('.docx')) {
+                alert('Please upload a .docx file');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('file', file);
+
+            fetch('/upload-document/', {
+                method: 'POST',
+                body: formData
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    currentDocumentId = data.document_id;
+                    document.getElementById('fileName').textContent = data.filename;
+                    document.getElementById('fileSize').textContent = formatSize(data.size);
+                    fileInfo.style.display = 'block';
+                } else {
+                    alert(data.error);
+                }
+            })
+            .catch(err => alert('Upload failed: ' + err.message));
+        }
+
+        // Process document
+        processBtn.addEventListener('click', () => {
+            if (!currentDocumentId) return;
+
+            processingOverlay.style.display = 'flex';
+
+            const body = new FormData();
+            if (lastPatientName) body.append('patient_name', lastPatientName);
+
+            fetch(`/process-document/${currentDocumentId}/`, { method: 'POST', body })
+            .then(res => res.json())
+            .then(data => {
+                processingOverlay.style.display = 'none';
+                if (data.success) {
+                    showResults(data);
+                } else {
+                    alert(data.error);
+                }
+            })
+            .catch(err => {
+                processingOverlay.style.display = 'none';
+                alert('Processing failed: ' + err.message);
+            });
+        });
+
+        splitBtn.addEventListener('click', () => {
+            if (!selectedFile) {
+                alert('Please upload a PDF file');
+                return;
+            }
+
+            const lowerName = (selectedFile.name || '').toLowerCase();
+            if (!lowerName.endsWith('.pdf')) {
+                alert('Please upload a .pdf file');
+                return;
+            }
+
+            const rangesText = (pageRanges.value || '').trim();
+            if (!rangesText) {
+                alert('Please enter page ranges (e.g., 1-4, 5-7)');
+                return;
+            }
+
+            processingOverlay.style.display = 'flex';
+
+            const formData = new FormData();
+            formData.append('file', selectedFile);
+            formData.append('page_ranges', rangesText);
+
+            fetch('/split-pdf/', {
+                method: 'POST',
+                body: formData
+            })
+            .then(res => res.json())
+            .then(data => {
+                processingOverlay.style.display = 'none';
+                if (data.success) {
+                    showSplitResults(data);
+                } else {
+                    alert(data.error || 'Split failed');
+                }
+            })
+            .catch(err => {
+                processingOverlay.style.display = 'none';
+                alert('Split failed: ' + err.message);
+            });
+        });
+
+        // Show results
+        function showResults(data) {
+            emptyState.style.display = 'none';
+            resultsContainer.style.display = 'block';
+            splitPdfResults.style.display = 'none';
+            autoLinkResults.style.display = 'block';
+            document.getElementById('downloadBtn').style.display = 'block';
+            statsGrid.style.display = 'grid';
+            successRateBox.style.display = 'block';
+            infoSection.style.display = 'block';
+
+            document.getElementById('totalCount').textContent = data.results.total_statements;
+            document.getElementById('linkedCount').textContent = data.results.linked_statements;
+            document.getElementById('missingCount').textContent = data.results.unlinked_statements;
+            document.getElementById('successRate').textContent = data.results.success_rate + '%';
+
+            document.getElementById('patientName').textContent = data.patient_name;
+            document.getElementById('pdfCount').textContent = data.pdf_count;
+            document.getElementById('processingTime').textContent = data.processing_time.toFixed(2) + 's';
+
+            // Missing PDFs
+            if (data.unlinked_messages && data.unlinked_messages.length > 0) {
+                const missingItems = document.getElementById('missingItems');
+                missingItems.innerHTML = '';
+                data.unlinked_messages.forEach(msg => {
+                    const div = document.createElement('div');
+                    div.className = 'missing-item';
+                    div.textContent = msg;
+                    missingItems.appendChild(div);
+                });
+                document.getElementById('missingList').style.display = 'block';
+            }
+
+            document.getElementById('downloadBtn').onclick = () => {
+                window.location.href = `/download-document/${currentDocumentId}/`;
+            };
+        }
+
+        function showSplitResults(data) {
+            emptyState.style.display = 'none';
+            resultsContainer.style.display = 'block';
+            document.getElementById('missingList').style.display = 'none';
+
+            autoLinkResults.style.display = 'none';
+            splitPdfResults.style.display = 'block';
+
+            currentSplitJobId = data.job_id;
+            splitTotalPages.textContent = data.total_pages ?? '-';
+            splitCount.textContent = data.count ?? '-';
+
+            if (splitPatientName) {
+                splitPatientName.value = lastPatientName || '';
+            }
+
+            splitFiles.innerHTML = '';
+            (data.files || []).forEach(f => {
+                const row = document.createElement('div');
+                row.className = 'missing-item';
+                row.style.background = '#eef2ff';
+                row.style.borderLeftColor = '#4f46e5';
+                row.style.color = '#1f2937';
+
+                const a = document.createElement('a');
+                a.href = f.download_url;
+                a.textContent = `${f.filename}`;
+                a.style.color = '#1f2937';
+                a.style.fontWeight = '600';
+                a.style.textDecoration = 'underline';
+
+                row.appendChild(a);
+                splitFiles.appendChild(row);
+            });
+
+            downloadAllBtn.onclick = () => {
+                if (!data.download_all_url) return;
+                window.location.href = data.download_all_url;
+            };
+        }
+
+        uploadSplitBtn.addEventListener('click', () => {
+            if (!currentSplitJobId) {
+                alert('No split job found. Please split a PDF first.');
+                return;
+            }
+
+            const name = (splitPatientName.value || '').trim();
+            if (!name) {
+                alert('Please enter patient name');
+                return;
+            }
+
+            processingOverlay.style.display = 'flex';
+
+            const formData = new FormData();
+            formData.append('patient_name', name);
+
+            fetch(`/upload-split-to-drive/${currentSplitJobId}/`, {
+                method: 'POST',
+                body: formData
+            })
+            .then(res => res.json())
+            .then(data => {
+                processingOverlay.style.display = 'none';
+                if (data.success) {
+                    lastPatientName = data.patient_name || name;
+                    try {
+                        sessionStorage.setItem('lastPatientName', lastPatientName);
+                    } catch (e) {
+                        // ignore
+                    }
+                    alert(`Uploaded ${data.count} PDFs to Drive for patient ${lastPatientName}`);
+                    window.location.href = '/processor/';
+                } else {
+                    alert(data.error || 'Upload failed');
+                }
+            })
+            .catch(err => {
+                processingOverlay.style.display = 'none';
+                alert('Upload failed: ' + err.message);
+            });
+        });
+
+        // One-Click functionality
+        function checkOneClickFiles() {
+            previewBtn.disabled = !(oneClickWordFile.files[0] && oneClickPdfFile.files[0]);
+        }
+
+        oneClickWordFile.addEventListener('change', checkOneClickFiles);
+        oneClickPdfFile.addEventListener('change', checkOneClickFiles);
+
+        previewBtn.addEventListener('click', () => {
+            const wordFile = oneClickWordFile.files[0];
+            const pdfFile = oneClickPdfFile.files[0];
+
+            if (!wordFile || !pdfFile) {
+                alert('Please upload both Word and PDF files');
+                return;
+            }
+
+            processingOverlay.style.display = 'flex';
+
+            const formData = new FormData();
+            formData.append('word_file', wordFile);
+            formData.append('pdf_file', pdfFile);
+
+            fetch('/unified-preview/', {
+                method: 'POST',
+                body: formData
+            })
+            .then(res => res.json())
+            .then(data => {
+                processingOverlay.style.display = 'none';
+
+                if (data.success) {
+                    currentSessionId = data.session_id;
+
+                    // Show preview section
+                    emptyState.style.display = 'none';
+                    resultsContainer.style.display = 'block';
+                    previewSection.style.display = 'block';
+                    finalResultsSection.style.display = 'none';
+
+                    // Populate verification data
+                    document.getElementById('oneClickPatientName').textContent = data.patient_name;
+                    document.getElementById('oneClickTotalStatements').textContent = data.total_statements;
+                    document.getElementById('oneClickPdfPages').textContent = data.pdf_total_pages;
+
+                    // Populate ranges list
+                    const rangesList = document.getElementById('oneClickRangesList');
+                    rangesList.innerHTML = data.page_ranges.map((r, i) =>
+                        `<div style="padding: 4px 0;">${i + 1}. ${r}</div>`
+                    ).join('');
+
+                    // Pre-fill patient name input
+                    document.getElementById('oneClickPatientNameInput').value = data.patient_name;
+                } else {
+                    alert(data.error || 'Preview failed');
+                }
+            })
+            .catch(err => {
+                processingOverlay.style.display = 'none';
+                alert('Preview failed: ' + err.message);
+            });
+        });
+
+        processAllBtn.addEventListener('click', async () => {
+            if (!currentSessionId) {
+                alert('Please preview first');
+                return;
+            }
+
+            const patientName = document.getElementById('oneClickPatientNameInput').value.trim();
+            if (!patientName) {
+                alert('Please enter patient name');
+                return;
+            }
+
+            // Show processing overlay with progress
+            processingOverlay.style.display = 'flex';
+            processingText.textContent = 'Starting...';
+            progressBarContainer.style.display = 'block';
+            progressPercentage.style.display = 'block';
+            progressBar.style.width = '0%';
+            progressPercentage.textContent = '0%';
+
+            const formData = new FormData();
+            formData.append('session_id', currentSessionId);
+            formData.append('patient_name', patientName);
+
+            try {
+                const response = await fetch('/unified-complete/', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                let buffer = '';
+                let finalResult = null;
+
+                while (true) {
+                    const { done, value } = await reader.read();
+
+                    if (done) break;
+
+                    buffer += decoder.decode(value, { stream: true });
+
+                    // Process complete SSE messages
+                    const lines = buffer.split('\n\n');
+                    buffer = lines.pop(); // Keep incomplete message in buffer
+
+                    for (const line of lines) {
+                        if (line.startsWith('data: ')) {
+                            const jsonStr = line.substring(6);
+                            try {
+                                const data = JSON.parse(jsonStr);
+
+                                // Update progress UI
+                                if (data.message) {
+                                    processingText.textContent = data.message;
+                                }
+
+                                if (data.progress !== undefined) {
+                                    progressBar.style.width = data.progress + '%';
+                                    progressPercentage.textContent = Math.round(data.progress) + '%';
+                                }
+
+                                // Handle completion
+                                if (data.status === 'complete' && data.result) {
+                                    finalResult = data.result;
+                                }
+
+                                // Handle errors
+                                if (data.status === 'error') {
+                                    processingOverlay.style.display = 'none';
+                                    alert(data.message || 'Processing failed');
+                                    console.error(data.traceback);
+                                    return;
+                                }
+                            } catch (e) {
+                                console.error('Failed to parse SSE data:', e);
+                            }
+                        }
+                    }
+                }
+
+                // Processing complete
+                processingOverlay.style.display = 'none';
+
+                if (finalResult && finalResult.success) {
+                    // Hide preview, show final results
+                    previewSection.style.display = 'none';
+                    finalResultsSection.style.display = 'block';
+
+                    // Populate final results
+                    document.getElementById('oneClickSuccessRate').textContent = finalResult.word_result.success_rate + '%';
+                    document.getElementById('oneClickLinked').textContent = finalResult.word_result.linked_statements;
+                    document.getElementById('oneClickSplits').textContent = finalResult.total_splits;
+                    document.getElementById('finalPatientName').textContent = finalResult.patient_name;
+
+                    // Set download button
+                    downloadFinalBtn.onclick = () => {
+                        window.location.href = finalResult.download_url;
+                    };
+                } else {
+                    alert('Processing failed');
+                }
+
+            } catch (err) {
+                processingOverlay.style.display = 'none';
+                alert('Processing failed: ' + err.message);
+                console.error(err);
+            }
+        });
+
+        // Auto-Extract functionality
+        wordFileInput.addEventListener('change', () => {
+            autoExtractBtn.disabled = !wordFileInput.files[0];
+        });
+
+        autoExtractBtn.addEventListener('click', () => {
+            const wordFile = wordFileInput.files[0];
+            if (!wordFile) {
+                alert('Please select a Word document first');
+                return;
+            }
+
+            if (!wordFile.name.toLowerCase().endsWith('.docx')) {
+                alert('Please upload a .docx file');
+                return;
+            }
+
+            // Show processing status
+            extractionStatus.style.display = 'block';
+            extractionStatus.innerHTML = '<span style="color: #666;">⏳ Extracting page ranges...</span>';
+            autoExtractBtn.disabled = true;
+
+            const formData = new FormData();
+            formData.append('file', wordFile);
+
+            fetch('/extract-page-ranges/', {
+                method: 'POST',
+                body: formData
+            })
+            .then(res => res.json())
+            .then(data => {
+                autoExtractBtn.disabled = false;
+
+                if (data.success) {
+                    // Populate page ranges field
+                    pageRanges.value = data.formatted;
+
+                    // Show success message
+                    extractionStatus.innerHTML = `<span style="color: #16a34a;">✓ Successfully extracted ${data.total_ranges} page ranges!</span>`;
+
+                    // Hide status after 3 seconds
+                    setTimeout(() => {
+                        extractionStatus.style.display = 'none';
+                    }, 3000);
+                } else {
+                    extractionStatus.innerHTML = `<span style="color: #dc2626;">✗ ${data.error}</span>`;
+                }
+            })
+            .catch(err => {
+                autoExtractBtn.disabled = false;
+                extractionStatus.innerHTML = `<span style="color: #dc2626;">✗ Extraction failed: ${err.message}</span>`;
+            });
+        });
+
+        function formatSize(bytes) {
+            if (bytes < 1024) return bytes + ' B';
+            if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+            return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+        }
+
+        // ===== PAGE RANGE ENHANCED FUNCTIONALITY =====
+
+        const quickStartPage = document.getElementById('quickStartPage');
+        const quickEndPage = document.getElementById('quickEndPage');
+        const addRangeBtn = document.getElementById('addRangeBtn');
+        const addSeparatorBtn = document.getElementById('addSeparatorBtn');
+        const clearRangesBtn = document.getElementById('clearRangesBtn');
+        const rangePreview = document.getElementById('rangePreview');
+        const rangeChips = document.getElementById('rangeChips');
+
+        // Update preview chips when input changes
+        pageRanges.addEventListener('input', updateRangePreview);
+
+        function updateRangePreview() {
+            const value = pageRanges.value.trim();
+            if (!value) {
+                rangePreview.style.display = 'none';
+                return;
+            }
+
+            rangePreview.style.display = 'block';
+            rangeChips.innerHTML = '';
+
+            // Split by semicolons (separate PDFs)
+            const groups = value.split(/[;\n]+/).filter(g => g.trim());
+
+            groups.forEach((group, groupIndex) => {
+                const ranges = group.split(',').map(r => r.trim()).filter(r => r);
+
+                ranges.forEach((range, rangeIndex) => {
+                    const chip = document.createElement('span');
+                    chip.className = 'range-chip';
+                    chip.innerHTML = `
+                        <span>${range}</span>
+                        <span class="remove-chip" onclick="removeRange(${groupIndex}, ${rangeIndex})">×</span>
+                    `;
+                    rangeChips.appendChild(chip);
+                });
+
+                // Add separator chip between groups
+                if (groupIndex < groups.length - 1) {
+                    const separator = document.createElement('span');
+                    separator.className = 'range-chip separator';
+                    separator.textContent = 'New PDF';
+                    rangeChips.appendChild(separator);
+                }
+            });
+        }
+
+        // Remove a specific range
+        window.removeRange = function(groupIndex, rangeIndex) {
+            const groups = pageRanges.value.split(/[;\n]+/).filter(g => g.trim());
+            const group = groups[groupIndex];
+            const ranges = group.split(',').map(r => r.trim()).filter(r => r);
+
+            ranges.splice(rangeIndex, 1);
+
+            if (ranges.length > 0) {
+                groups[groupIndex] = ranges.join(',');
+            } else {
+                groups.splice(groupIndex, 1);
+            }
+
+            pageRanges.value = groups.join(';');
+            updateRangePreview();
+        };
+
+        // Quick add range functionality
+        addRangeBtn.addEventListener('click', () => {
+            const start = quickStartPage.value;
+            const end = quickEndPage.value;
+
+            if (!start) {
+                alert('Please enter a start page');
+                return;
+            }
+
+            let newRange = start;
+            if (end && end !== start) {
+                newRange = `${start}-${end}`;
+            }
+
+            const current = pageRanges.value.trim();
+            if (current) {
+                // Check if last character is a separator
+                const lastChar = current[current.length - 1];
+                if (lastChar === ';' || lastChar === '\n') {
+                    pageRanges.value = current + newRange;
+                } else {
+                    pageRanges.value = current + ',' + newRange;
+                }
+            } else {
+                pageRanges.value = newRange;
+            }
+
+            // Clear inputs
+            quickStartPage.value = '';
+            quickEndPage.value = '';
+
+            updateRangePreview();
+        });
+
+        // Add separator (new PDF)
+        addSeparatorBtn.addEventListener('click', () => {
+            const current = pageRanges.value.trim();
+            if (current && current[current.length - 1] !== ';') {
+                pageRanges.value = current + ';';
+                updateRangePreview();
+            }
+        });
+
+        // Clear all ranges
+        clearRangesBtn.addEventListener('click', () => {
+            if (confirm('Clear all page ranges?')) {
+                pageRanges.value = '';
+                quickStartPage.value = '';
+                quickEndPage.value = '';
+                updateRangePreview();
+            }
+        });
+
+        // ===== END PAGE RANGE FUNCTIONALITY =====
+
+        // Initialize with one-click mode
+        setMode('one_click');
+    </script>
+</body>
+</html>

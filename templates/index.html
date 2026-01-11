@@ -1,0 +1,166 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PDF Automation System - Smart Medical Document Processing</title>
+    <meta name="description" content="Intelligent PDF sectioning and Google Drive integration for medical records">
+    
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    
+    <!-- Styles -->
+    <link rel="stylesheet" href="{% static 'css/style.css' %}">
+</head>
+<body>
+    <!-- Header -->
+    <header class="header">
+        <div class="container">
+            <h1>📄 PDF Automation System</h1>
+            <p>Smart Medical Document Processing & Drive Integration</p>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="container main-content">
+        <!-- Stats Dashboard -->
+        <div class="stats-grid fade-in">
+            <div class="stat-card">
+                <h3>Total PDFs</h3>
+                <div class="stat-value" id="stat-pdfs">{{ total_pdfs }}</div>
+            </div>
+            <div class="stat-card">
+                <h3>Patients</h3>
+                <div class="stat-value" id="stat-patients">{{ total_patients }}</div>
+            </div>
+            <div class="stat-card">
+                <h3>PDF Sets</h3>
+                <div class="stat-value" id="stat-sets">{{ total_sets }}</div>
+            </div>
+            <div class="stat-card">
+                <h3>Uploaded to Drive</h3>
+                <div class="stat-value" id="stat-uploaded">{{ uploaded_sets }}</div>
+            </div>
+        </div>
+
+        <!-- Upload Section -->
+        <div class="card fade-in">
+            <div class="card-header">
+                <h2 class="card-title">📤 Upload PDF</h2>
+            </div>
+            
+            <div id="alert-container"></div>
+            
+            <div class="upload-zone" id="upload-zone">
+                <div class="upload-icon">📁</div>
+                <h3>Drop your PDF here or click to browse</h3>
+                <p>Upload large medical PDFs containing multiple patient records</p>
+                <button class="btn btn-primary" onclick="document.getElementById('file-input').click()">
+                    Choose File
+                </button>
+                <input type="file" id="file-input" accept=".pdf">
+            </div>
+            
+            <div id="upload-progress" style="display: none;">
+                <div class="progress-bar">
+                    <div class="progress-fill" id="progress-fill" style="width: 0%"></div>
+                </div>
+                <p style="text-align: center; color: var(--text-muted);">Uploading and analyzing...</p>
+            </div>
+        </div>
+
+        <!-- PDF Info Section -->
+        <div class="card fade-in" id="pdf-info-section" style="display: none;">
+            <div class="card-header">
+                <h2 class="card-title">📋 PDF Information</h2>
+                <button class="btn btn-primary" id="auto-detect-btn">
+                    🔍 Auto-Detect Sections
+                </button>
+            </div>
+            
+            <div class="section-info">
+                <div class="info-item">
+                    <span class="info-label">Filename</span>
+                    <span class="info-value" id="pdf-filename">-</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Total Pages</span>
+                    <span class="info-value" id="pdf-pages">-</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">PDF ID</span>
+                    <span class="info-value" id="pdf-id">-</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Detected Sections -->
+        <div class="card fade-in" id="sections-section" style="display: none;">
+            <div class="card-header">
+                <h2 class="card-title">🎯 Detected Patient Sections</h2>
+                <button class="btn btn-success" id="create-sets-btn">
+                    ✅ Create PDF Sets
+                </button>
+            </div>
+            
+            <div class="sections-list" id="sections-list">
+                <!-- Sections will be populated here -->
+            </div>
+        </div>
+
+        <!-- PDF Sets Management -->
+        <div class="card fade-in" id="sets-section" style="display: none;">
+            <div class="card-header">
+                <h2 class="card-title">📦 PDF Sets</h2>
+                <button class="btn btn-primary" id="process-all-btn">
+                    ⚡ Process All Sets
+                </button>
+            </div>
+            
+            <div class="sections-list" id="sets-list">
+                <!-- Sets will be populated here -->
+            </div>
+        </div>
+
+        <!-- Word Document Hyperlink Processor -->
+        <div class="card fade-in">
+            <div class="card-header">
+                <h2 class="card-title">📝 Word Document Hyperlink Processor</h2>
+                <a href="/word-processor/" class="btn btn-primary" style="text-decoration: none;">
+                    ⚡ Process Word Documents
+                </a>
+            </div>
+
+            <div style="padding: 20px; text-align: center; color: var(--text-muted);">
+                <p style="margin-bottom: 15px;">Automatically add hyperlinks to Word documents based on PDFs in Google Drive</p>
+                <ul style="list-style: none; padding: 0; text-align: left; max-width: 500px; margin: 0 auto;">
+                    <li style="padding: 8px 0;"><strong>✓</strong> Upload Word documents or use from Drive</li>
+                    <li style="padding: 8px 0;"><strong>✓</strong> Automatic patient folder detection</li>
+                    <li style="padding: 8px 0;"><strong>✓</strong> Link statements to PDFs by page ranges</li>
+                    <li style="padding: 8px 0;"><strong>✓</strong> Hyperlinks visible in Word with blue underline</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- Patients & Summary Generation -->
+        <div class="card fade-in">
+            <div class="card-header">
+                <h2 class="card-title">👥 Patients & Summary Documents</h2>
+                <button class="btn btn-secondary" id="refresh-patients-btn">
+                    🔄 Refresh
+                </button>
+            </div>
+
+            <div class="sections-list" id="patients-list">
+                <p style="text-align: center; color: var(--text-muted);">No patients yet. Upload and process PDFs to get started.</p>
+            </div>
+        </div>
+    </main>
+
+    <!-- JavaScript -->
+    <script src="{% static 'js/app.js' %}"></script>
+</body>
+</html>

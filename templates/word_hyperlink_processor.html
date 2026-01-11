@@ -1,0 +1,976 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Word Document Hyperlink Processor</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 28px;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            opacity: 0.9;
+            font-size: 14px;
+        }
+
+        .header .back-btn {
+            position: absolute;
+            top: 30px;
+            left: 30px;
+            background: rgba(255,255,255,0.2);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            text-decoration: none;
+            display: inline-block;
+            font-weight: 600;
+            transition: all 0.3s;
+        }
+
+        .header .back-btn:hover {
+            background: rgba(255,255,255,0.3);
+        }
+
+        .content {
+            padding: 40px;
+        }
+
+        /* Word Document Section */
+        .section {
+            margin-bottom: 40px;
+        }
+
+        .section-title {
+            font-size: 18px;
+            font-weight: 700;
+            color: #2d3748;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .section-title .badge {
+            background: #667eea;
+            color: white;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        /* Document Input Methods */
+        .doc-method-selector {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            border-radius: 10px;
+            background: #f7fafc;
+            padding: 10px;
+        }
+
+        .doc-method-btn {
+            flex: 1;
+            padding: 15px;
+            border: 2px solid transparent;
+            background: white;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-size: 14px;
+            font-weight: 600;
+            color: #4a5568;
+        }
+
+        .doc-method-btn:hover {
+            border-color: #667eea;
+            color: #667eea;
+        }
+
+        .doc-method-btn.active {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-color: transparent;
+        }
+
+        /* Upload Zone */
+        .upload-zone {
+            border: 3px dashed #cbd5e0;
+            border-radius: 12px;
+            padding: 40px;
+            text-align: center;
+            transition: all 0.3s;
+            cursor: pointer;
+            background: #f7fafc;
+        }
+
+        .upload-zone:hover {
+            border-color: #667eea;
+            background: #edf2f7;
+        }
+
+        .upload-zone.dragover {
+            border-color: #667eea;
+            background: #e6f2ff;
+        }
+
+        .upload-zone.has-file {
+            border-color: #48bb78;
+            background: #f0fff4;
+        }
+
+        .upload-icon {
+            font-size: 48px;
+            margin-bottom: 15px;
+        }
+
+        .upload-zone h3 {
+            color: #2d3748;
+            margin-bottom: 10px;
+            font-size: 16px;
+        }
+
+        .upload-zone p {
+            color: #718096;
+            font-size: 14px;
+            margin-bottom: 15px;
+        }
+
+        .upload-zone .file-name {
+            color: #48bb78;
+            font-weight: 600;
+            margin-top: 10px;
+        }
+
+        .upload-zone input[type="file"] {
+            display: none;
+        }
+
+        /* Folder Path Method */
+        .folder-method-selector {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            border-radius: 10px;
+            background: #f7fafc;
+            padding: 10px;
+        }
+
+        .folder-method-btn {
+            flex: 1;
+            padding: 12px;
+            border: 2px solid transparent;
+            background: white;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-size: 13px;
+            font-weight: 600;
+            color: #4a5568;
+        }
+
+        .folder-method-btn:hover {
+            border-color: #667eea;
+            color: #667eea;
+        }
+
+        .folder-method-btn.active {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-color: transparent;
+        }
+
+        .form-section {
+            display: none;
+        }
+
+        .form-section.active {
+            display: block;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #2d3748;
+            font-size: 14px;
+        }
+
+        .form-group input,
+        .form-group select {
+            width: 100%;
+            padding: 12px 16px;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: all 0.3s;
+        }
+
+        .form-group input:focus,
+        .form-group select:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .form-group small {
+            display: block;
+            margin-top: 6px;
+            color: #718096;
+            font-size: 12px;
+        }
+
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+        }
+
+        .btn {
+            padding: 14px 28px;
+            border: none;
+            border-radius: 10px;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: inline-block;
+            text-align: center;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-primary:disabled {
+            background: #cbd5e0;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .btn-secondary {
+            background: #edf2f7;
+            color: #4a5568;
+        }
+
+        .btn-secondary:hover {
+            background: #e2e8f0;
+        }
+
+        .btn-block {
+            width: 100%;
+            margin-top: 10px;
+        }
+
+        /* Loading Spinner */
+        .loading-container {
+            display: none;
+            text-align: center;
+            padding: 40px 20px;
+        }
+
+        .loading-container.active {
+            display: block;
+        }
+
+        .spinner {
+            border: 4px solid #f3f4f6;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .loading-text {
+            color: #718096;
+            font-size: 14px;
+        }
+
+        /* Results Section */
+        .results {
+            display: none;
+            margin-top: 30px;
+            padding: 30px;
+            background: #f7fafc;
+            border-radius: 12px;
+        }
+
+        .results.active {
+            display: block;
+        }
+
+        .results.success {
+            background: #f0fff4;
+            border: 2px solid #48bb78;
+        }
+
+        .results.error {
+            background: #fff5f5;
+            border: 2px solid #f56565;
+        }
+
+        .results-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .results-title {
+            font-size: 20px;
+            font-weight: 700;
+            color: #2d3748;
+        }
+
+        .success .results-title {
+            color: #22543d;
+        }
+
+        .error .results-title {
+            color: #742a2a;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .stat-box {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+        }
+
+        .stat-label {
+            font-size: 12px;
+            color: #718096;
+            margin-bottom: 5px;
+        }
+
+        .stat-value {
+            font-size: 24px;
+            font-weight: 700;
+            color: #2d3748;
+        }
+
+        .details-list {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .detail-item {
+            padding: 12px;
+            margin-bottom: 10px;
+            border-left: 3px solid #cbd5e0;
+            background: #f7fafc;
+            border-radius: 4px;
+        }
+
+        .detail-item.linked {
+            border-left-color: #48bb78;
+            background: #f0fff4;
+        }
+
+        .detail-item.not-linked {
+            border-left-color: #f56565;
+            background: #fff5f5;
+        }
+
+        .detail-range {
+            font-weight: 700;
+            color: #2d3748;
+            margin-bottom: 5px;
+        }
+
+        .detail-status {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 600;
+            margin-right: 8px;
+        }
+
+        .detail-status.linked {
+            background: #48bb78;
+            color: white;
+        }
+
+        .detail-status.not-linked {
+            background: #f56565;
+            color: white;
+        }
+
+        .detail-text {
+            color: #718096;
+            font-size: 13px;
+            margin-top: 5px;
+        }
+
+        .error-message {
+            color: #742a2a;
+            padding: 15px;
+            background: white;
+            border-radius: 8px;
+            margin-bottom: 15px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <a href="/" class="back-btn">← Back to Home</a>
+            <h1>Word Document Hyperlink Processor</h1>
+            <p>Automatically add hyperlinks to Word documents based on PDFs in Google Drive</p>
+        </div>
+
+        <div class="content">
+            <!-- Step 1: Word Document Upload/Selection -->
+            <div class="section">
+                <div class="section-title">
+                    <span class="badge">Step 1</span>
+                    Word Document
+                </div>
+
+                <div class="doc-method-selector">
+                    <button class="doc-method-btn active" data-doc-method="upload">
+                        📤 Upload File
+                    </button>
+                    <button class="doc-method-btn" data-doc-method="drive">
+                        ☁️ From Google Drive
+                    </button>
+                </div>
+
+                <!-- Upload Method -->
+                <div class="form-section active" data-doc-section="upload">
+                    <div class="upload-zone" id="word-upload-zone">
+                        <div class="upload-icon">📄</div>
+                        <h3>Drop Word document here or click to browse</h3>
+                        <p>Supported format: .docx</p>
+                        <button type="button" class="btn btn-primary" onclick="document.getElementById('word-file-input').click()">
+                            Choose Word File
+                        </button>
+                        <input type="file" id="word-file-input" accept=".docx">
+                        <div class="file-name" id="word-file-name" style="display: none;"></div>
+                    </div>
+                </div>
+
+                <!-- Drive Method -->
+                <div class="form-section" data-doc-section="drive">
+                    <div class="form-group">
+                        <label for="word-file-id">Word Document File ID or URL</label>
+                        <input type="text" id="word-file-id" name="word_file_id"
+                               placeholder="1FJ0zAlmvD_HfysnjZrPmWX5Zlm12Hyqr or https://docs.google.com/document/d/...">
+                        <small>Paste the full Drive URL or just the file ID</small>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Step 2: PDF Folder Location -->
+            <div class="section">
+                <div class="section-title">
+                    <span class="badge">Step 2</span>
+                    PDF Folder Location
+                </div>
+
+                <div class="folder-method-selector">
+                    <button class="folder-method-btn active" data-method="patient">
+                        👤 Patient Name
+                    </button>
+                    <button class="folder-method-btn" data-method="path">
+                        📂 Drive Path
+                    </button>
+                    <button class="folder-method-btn" data-method="id">
+                        🔗 Folder ID
+                    </button>
+                </div>
+
+                <!-- Patient Name Method -->
+                <div class="form-section active" data-method="patient">
+                    <div class="form-group">
+                        <label for="patient-name">Patient Name</label>
+                        <input type="text" id="patient-name" name="patient_name"
+                               placeholder="Carl_Mayfield" required>
+                        <small>Use underscores instead of spaces (e.g., John_Doe)</small>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="year">Year (Optional)</label>
+                            <input type="text" id="year" name="year" placeholder="2025">
+                            <small>Leave blank for current year</small>
+                        </div>
+                        <div class="form-group">
+                            <label for="month">Month (Optional)</label>
+                            <select id="month" name="month">
+                                <option value="">Current Month</option>
+                                <option value="January">January</option>
+                                <option value="February">February</option>
+                                <option value="March">March</option>
+                                <option value="April">April</option>
+                                <option value="May">May</option>
+                                <option value="June">June</option>
+                                <option value="July">July</option>
+                                <option value="August">August</option>
+                                <option value="September">September</option>
+                                <option value="October">October</option>
+                                <option value="November">November</option>
+                                <option value="December">December</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Drive Path Method -->
+                <div class="form-section" data-method="path">
+                    <div class="form-group">
+                        <label for="drive-folder-path">Drive Folder Path</label>
+                        <input type="text" id="drive-folder-path" name="drive_folder_path"
+                               placeholder="2025/December/Carl_Mayfield/splits">
+                        <small>Full path to the folder containing PDF files</small>
+                    </div>
+                </div>
+
+                <!-- Folder ID Method -->
+                <div class="form-section" data-method="id">
+                    <div class="form-group">
+                        <label for="drive-folder-id">Drive Folder ID or URL</label>
+                        <input type="text" id="drive-folder-id" name="drive_folder_id"
+                               placeholder="18bgU4MQZQzN3GXfH8Ql7FI9eB1bf8m5q or https://drive.google.com/drive/folders/...">
+                        <small>Paste the full Drive URL or just the folder ID</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="output-folder-id">Output Folder ID or URL (Optional)</label>
+                        <input type="text" id="output-folder-id" name="output_folder_id"
+                               placeholder="1kknhW9lqU2loOj0joIqVRHmnf0wuXXpQ or https://drive.google.com/drive/folders/...">
+                        <small>Where to save the processed document (defaults to same as PDF folder)</small>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Process Button -->
+            <button type="button" class="btn btn-primary btn-block" id="process-btn">
+                ⚡ Process Document
+            </button>
+
+            <!-- Loading State -->
+            <div class="loading-container" id="loading-container">
+                <div class="spinner"></div>
+                <div class="loading-text">Processing your document...</div>
+                <div class="loading-text" style="margin-top: 10px; font-size: 12px;">This may take 10-60 seconds depending on document size</div>
+            </div>
+
+            <!-- Results Section -->
+            <div class="results" id="results-container">
+                <div class="results-header">
+                    <h2 class="results-title" id="results-title">Processing Complete!</h2>
+                    <button class="btn btn-secondary" onclick="location.reload()">Process Another</button>
+                </div>
+
+                <div class="error-message" id="error-message" style="display: none;"></div>
+
+                <div class="stats-grid" id="stats-grid">
+                    <div class="stat-box">
+                        <div class="stat-label">Total Statements</div>
+                        <div class="stat-value" id="stat-total">0</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-label">Linked Statements</div>
+                        <div class="stat-value" id="stat-linked">0</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-label">Success Rate</div>
+                        <div class="stat-value" id="stat-rate">0%</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-label">PDFs Found</div>
+                        <div class="stat-value" id="stat-pdfs">0</div>
+                    </div>
+                </div>
+
+                <button class="btn btn-primary btn-block" id="open-doc-btn" style="display: none;">
+                    📄 Open Processed Document
+                </button>
+
+                <div style="margin-top: 20px;">
+                    <h3 style="margin-bottom: 15px; color: #2d3748; font-size: 16px;">Detailed Results</h3>
+                    <div class="details-list" id="details-list"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let uploadedWordFile = null;
+        let currentDocMethod = 'upload';
+        let currentFolderMethod = 'patient';
+
+        // Helper function to extract ID from Google Drive URL
+        function extractDriveId(input) {
+            if (!input) return input;
+
+            input = input.trim();
+
+            // If it's not a URL (doesn't contain http), return as-is
+            if (!input.includes('http')) {
+                return input;
+            }
+
+            // Extract file ID from document URL
+            // https://docs.google.com/document/d/FILE_ID/edit
+            let match = input.match(/\/document\/d\/([a-zA-Z0-9_-]+)/);
+            if (match) return match[1];
+
+            // Extract file ID from file URL
+            // https://drive.google.com/file/d/FILE_ID/view
+            match = input.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
+            if (match) return match[1];
+
+            // Extract folder ID from folder URL
+            // https://drive.google.com/drive/folders/FOLDER_ID
+            match = input.match(/\/folders\/([a-zA-Z0-9_-]+)/);
+            if (match) return match[1];
+
+            // Extract from open URL with ID parameter
+            // https://drive.google.com/open?id=FILE_ID
+            match = input.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+            if (match) return match[1];
+
+            // If no match, return original (might already be an ID)
+            return input;
+        }
+
+        // Document Method Switching
+        const docMethodBtns = document.querySelectorAll('.doc-method-btn');
+        const docSections = document.querySelectorAll('[data-doc-section]');
+
+        docMethodBtns.forEach(btn => {
+            btn.addEventListener('click', () => {
+                const method = btn.dataset.docMethod;
+                currentDocMethod = method;
+
+                docMethodBtns.forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+
+                docSections.forEach(section => {
+                    if (section.dataset.docSection === method) {
+                        section.classList.add('active');
+                    } else {
+                        section.classList.remove('active');
+                    }
+                });
+            });
+        });
+
+        // Folder Method Switching
+        const folderMethodBtns = document.querySelectorAll('.folder-method-btn');
+        const folderSections = document.querySelectorAll('[data-method]');
+
+        folderMethodBtns.forEach(btn => {
+            btn.addEventListener('click', () => {
+                const method = btn.dataset.method;
+                currentFolderMethod = method;
+
+                folderMethodBtns.forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+
+                folderSections.forEach(section => {
+                    if (section.dataset.method === method) {
+                        section.classList.add('active');
+                    } else {
+                        section.classList.remove('active');
+                    }
+                });
+            });
+        });
+
+        // Word File Upload Handling
+        const wordUploadZone = document.getElementById('word-upload-zone');
+        const wordFileInput = document.getElementById('word-file-input');
+        const wordFileName = document.getElementById('word-file-name');
+
+        wordFileInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                uploadedWordFile = file;
+                wordFileName.textContent = `✓ ${file.name}`;
+                wordFileName.style.display = 'block';
+                wordUploadZone.classList.add('has-file');
+            }
+        });
+
+        // Drag and drop
+        wordUploadZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            wordUploadZone.classList.add('dragover');
+        });
+
+        wordUploadZone.addEventListener('dragleave', () => {
+            wordUploadZone.classList.remove('dragover');
+        });
+
+        wordUploadZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            wordUploadZone.classList.remove('dragover');
+
+            const file = e.dataTransfer.files[0];
+            if (file && file.name.endsWith('.docx')) {
+                uploadedWordFile = file;
+                wordFileName.textContent = `✓ ${file.name}`;
+                wordFileName.style.display = 'block';
+                wordUploadZone.classList.add('has-file');
+            } else {
+                alert('Please drop a .docx file');
+            }
+        });
+
+        // Process Button
+        const processBtn = document.getElementById('process-btn');
+        const loadingContainer = document.getElementById('loading-container');
+        const resultsContainer = document.getElementById('results-container');
+
+        processBtn.addEventListener('click', async () => {
+            try {
+                // Validate inputs
+                let wordFileId = null;
+
+                if (currentDocMethod === 'upload') {
+                    if (!uploadedWordFile) {
+                        alert('Please upload a Word document first');
+                        return;
+                    }
+                    // We'll upload the file first
+                } else {
+                    wordFileId = document.getElementById('word-file-id').value.trim();
+                    if (!wordFileId) {
+                        alert('Please enter a Word file ID or URL');
+                        return;
+                    }
+                    // Extract ID from URL if needed
+                    wordFileId = extractDriveId(wordFileId);
+                }
+
+                // Build request data based on current folder method
+                const formData = new FormData();
+                let requestData = {};
+                let useFormData = false;
+
+                if (currentDocMethod === 'upload') {
+                    useFormData = true;
+                    formData.append('word_file', uploadedWordFile);
+                }
+
+                // Add folder location data
+                if (currentFolderMethod === 'patient') {
+                    const patientName = document.getElementById('patient-name').value.trim();
+                    if (!patientName) {
+                        alert('Please enter a patient name');
+                        return;
+                    }
+
+                    if (useFormData) {
+                        formData.append('patient_name', patientName);
+                        const year = document.getElementById('year').value.trim();
+                        const month = document.getElementById('month').value;
+                        if (year) formData.append('year', year);
+                        if (month) formData.append('month', month);
+                    } else {
+                        requestData.patient_name = patientName;
+                        requestData.word_file_id = wordFileId;
+                        const year = document.getElementById('year').value.trim();
+                        const month = document.getElementById('month').value;
+                        if (year) requestData.year = year;
+                        if (month) requestData.month = month;
+                    }
+                } else if (currentFolderMethod === 'path') {
+                    const path = document.getElementById('drive-folder-path').value.trim();
+                    if (!path) {
+                        alert('Please enter a drive folder path');
+                        return;
+                    }
+
+                    if (useFormData) {
+                        formData.append('drive_folder_path', path);
+                    } else {
+                        requestData.drive_folder_path = path;
+                        requestData.word_file_id = wordFileId;
+                    }
+                } else if (currentFolderMethod === 'id') {
+                    let folderId = document.getElementById('drive-folder-id').value.trim();
+                    if (!folderId) {
+                        alert('Please enter a drive folder ID or URL');
+                        return;
+                    }
+
+                    // Extract ID from URL if needed
+                    folderId = extractDriveId(folderId);
+
+                    if (useFormData) {
+                        formData.append('drive_folder_id', folderId);
+                        let outputId = document.getElementById('output-folder-id').value.trim();
+                        if (outputId) {
+                            outputId = extractDriveId(outputId);
+                            formData.append('output_folder_id', outputId);
+                        }
+                    } else {
+                        requestData.drive_folder_id = folderId;
+                        requestData.word_file_id = wordFileId;
+                        let outputId = document.getElementById('output-folder-id').value.trim();
+                        if (outputId) {
+                            outputId = extractDriveId(outputId);
+                            requestData.output_folder_id = outputId;
+                        }
+                    }
+                }
+
+                // Show loading
+                processBtn.style.display = 'none';
+                loadingContainer.classList.add('active');
+                resultsContainer.classList.remove('active');
+
+                // Make API call
+                const response = await fetch('/api/word/process-hyperlinks/', {
+                    method: 'POST',
+                    headers: useFormData ? {} : {'Content-Type': 'application/json'},
+                    body: useFormData ? formData : JSON.stringify(requestData)
+                });
+
+                const result = await response.json();
+
+                // Hide loading
+                loadingContainer.classList.remove('active');
+                processBtn.style.display = 'block';
+
+                // Show results
+                showResults(result, result.success);
+
+            } catch (error) {
+                console.error('Error:', error);
+                loadingContainer.classList.remove('active');
+                processBtn.style.display = 'block';
+
+                showResults({
+                    success: false,
+                    error: 'An unexpected error occurred: ' + error.message
+                }, false);
+            }
+        });
+
+        function showResults(result, isSuccess) {
+            const resultsContainer = document.getElementById('results-container');
+            const resultsTitle = document.getElementById('results-title');
+            const errorMessage = document.getElementById('error-message');
+            const statsGrid = document.getElementById('stats-grid');
+            const detailsList = document.getElementById('details-list');
+            const openDocBtn = document.getElementById('open-doc-btn');
+
+            resultsContainer.classList.add('active');
+
+            if (isSuccess) {
+                resultsContainer.classList.remove('error');
+                resultsContainer.classList.add('success');
+                resultsTitle.textContent = 'Processing Complete!';
+                errorMessage.style.display = 'none';
+                statsGrid.style.display = 'grid';
+
+                // Update statistics
+                document.getElementById('stat-total').textContent = result.statistics.total_statements;
+                document.getElementById('stat-linked').textContent = result.statistics.linked_statements;
+                document.getElementById('stat-rate').textContent = result.statistics.success_rate.toFixed(1) + '%';
+                document.getElementById('stat-pdfs').textContent = result.statistics.pdf_count;
+
+                // Show open button
+                if (result.output && result.output.webview_link) {
+                    openDocBtn.style.display = 'block';
+                    openDocBtn.onclick = () => window.open(result.output.webview_link, '_blank');
+                }
+
+                // Show detailed results
+                detailsList.innerHTML = '';
+                if (result.details && result.details.length > 0) {
+                    result.details.forEach(item => {
+                        const div = document.createElement('div');
+                        div.className = `detail-item ${item.status === 'linked' ? 'linked' : 'not-linked'}`;
+                        div.innerHTML = `
+                            <div class="detail-range">
+                                <span class="detail-status ${item.status === 'linked' ? 'linked' : 'not-linked'}">
+                                    ${item.status === 'linked' ? 'LINKED' : 'NOT FOUND'}
+                                </span>
+                                Pages ${item.page_range}
+                            </div>
+                            <div class="detail-text">${item.text.substring(0, 100)}${item.text.length > 100 ? '...' : ''}</div>
+                        `;
+                        detailsList.appendChild(div);
+                    });
+                }
+            } else {
+                resultsContainer.classList.remove('success');
+                resultsContainer.classList.add('error');
+                resultsTitle.textContent = 'Processing Failed';
+                errorMessage.textContent = result.error || 'An unknown error occurred';
+                errorMessage.style.display = 'block';
+                statsGrid.style.display = 'none';
+                openDocBtn.style.display = 'none';
+                detailsList.innerHTML = '';
+            }
+        }
+    </script>
+</body>
+</html>
