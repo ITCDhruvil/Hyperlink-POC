@@ -7,7 +7,7 @@ from django.http import JsonResponse, FileResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.core.files.base import ContentFile
 from django.contrib.auth.decorators import login_required
-from rest_framework.decorators import api_view
+from django.views.decorators.http import require_POST, require_http_methods
 import time
 import os
 import tempfile
@@ -30,7 +30,7 @@ def processor_ui(request):
     return render(request, 'pdfs/processor_ui.html')
 
 
-@api_view(['GET'])
+@require_http_methods(["GET"])
 @login_required
 def processing_history(request):
     """
@@ -74,7 +74,7 @@ def processing_history(request):
     return render(request, 'pdfs/processing_history.html', context)
 
 
-@api_view(['POST'])
+@require_POST
 @csrf_exempt
 @login_required
 def upload_document(request):
@@ -121,7 +121,7 @@ def upload_document(request):
         }, status=500)
 
 
-@api_view(['POST'])
+@require_POST
 @csrf_exempt
 @login_required
 def process_document(request, document_id):
@@ -347,7 +347,7 @@ def _parse_split_groups(ranges_text: str):
     return groups
 
 
-@api_view(['POST'])
+@require_POST
 @csrf_exempt
 @login_required
 def split_pdf_document(request):
@@ -426,7 +426,7 @@ def split_pdf_document(request):
         return JsonResponse({'success': False, 'error': str(e)}, status=500)
 
 
-@api_view(['POST'])
+@require_POST
 @csrf_exempt
 @login_required
 def upload_split_to_drive(request, job_id: str):
@@ -488,7 +488,7 @@ def upload_split_to_drive(request, job_id: str):
         return JsonResponse({'success': False, 'error': msg}, status=500)
 
 
-@api_view(['GET'])
+@require_http_methods(["GET"])
 @login_required
 def download_document(request, document_id):
     """
@@ -518,7 +518,7 @@ def download_document(request, document_id):
         }, status=404)
 
 
-@api_view(['POST'])
+@require_POST
 @csrf_exempt
 @login_required
 def extract_page_ranges_from_word(request):
@@ -572,7 +572,7 @@ def extract_page_ranges_from_word(request):
         }, status=500)
 
 
-@api_view(['POST'])
+@require_POST
 @csrf_exempt
 @login_required
 def unified_process_preview(request):
@@ -864,7 +864,7 @@ def progress_generator(session_id, patient_name_override):
         yield f"data: {json.dumps(error_data)}\n\n"
 
 
-@api_view(['POST'])
+@require_POST
 @csrf_exempt
 @login_required
 def unified_process_complete(request):
@@ -903,7 +903,7 @@ def unified_process_complete(request):
         }, status=500)
 
 
-@api_view(['GET'])
+@require_http_methods(["GET"])
 @login_required
 def download_split_zip(request, job_id: str):
     """Download all split PDFs for a job as a single zip."""

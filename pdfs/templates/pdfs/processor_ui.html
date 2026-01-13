@@ -412,7 +412,7 @@
                         <input type="file" class="form-control" id="oneClickPdfFile" accept=".pdf">
                         <div class="form-text">PDF to be split and uploaded</div>
                     </div>
-                    <button class="process-button" id="previewBtn" disabled>Preview & Verify</button>
+                    <button class="process-button" id="previewBtn" type="button" disabled>Preview & Verify</button>
                 </div>
 
                 <!-- Upload Area -->
@@ -466,26 +466,22 @@
                     </div>
 
                     <div class="form-text">Use commas to merge pages into one PDF (e.g., 4-5, 7-9, 55). Use ';' or new line to create multiple PDFs (e.g., 1-2; 4-5, 7-9, 55).</div>
-                    <button class="process-button" id="splitBtn" style="margin-top: 12px;">Split PDF</button>
+                    <button class="process-button" id="splitBtn" type="button" style="margin-top: 12px;">Split PDF</button>
                 </div>
 
                 <!-- File Info -->
                 <div class="file-info" id="fileInfo">
                     <h3>Document Ready</h3>
                     <div class="info-row">
-                        <span class="info-label">File:</span>
-                        <span class="info-value" id="fileName"></span>
-                    </div>
-                    <div class="info-row">
-                        <span class="info-label">Size:</span>
-                        <span class="info-value" id="fileSize"></span>
+                        <span class="info-label">Filename:</span>
+                        <span class="info-value" id="fileName">-</span>
                     </div>
                     <div class="info-row">
                         <span class="info-label">Status:</span>
                         <span class="info-value">Ready to process</span>
                     </div>
 
-                    <button class="process-button" id="processBtn">Process Document</button>
+                    <button class="process-button" id="processBtn" type="button">Process Document</button>
                 </div>
             </div>
 
@@ -600,7 +596,7 @@
                                 <div class="form-text">Edit if needed, or leave as detected</div>
                             </div>
 
-                            <button class="download-button" id="processAllBtn" style="background: #16a34a;">Process Everything</button>
+                            <button class="download-button" id="processAllBtn" type="button" style="background: #16a34a;">Process Everything</button>
                         </div>
 
                         <!-- Final Results Section -->
