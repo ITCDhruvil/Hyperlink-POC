@@ -3,6 +3,7 @@ from . import views
 from . import api_folder_config
 from . import views_processor_ui
 from . import views_auth
+from . import views_drive_explorer
 
 app_name = 'pdfs'
 
@@ -13,6 +14,7 @@ urlpatterns = [
 
     # User Management (Admin Only)
     path('users/', views_auth.user_management, name='user_management'),
+    path('users/<int:user_id>/history/', views_auth.user_processing_history, name='user_processing_history'),
     path('users/create/', views_auth.create_user, name='create_user'),
     path('users/<int:user_id>/delete/', views_auth.delete_user, name='delete_user'),
     path('users/<int:user_id>/toggle-active/', views_auth.toggle_user_active, name='toggle_user_active'),
@@ -21,6 +23,13 @@ urlpatterns = [
     # Main Application: Processor UI
     path('', views_processor_ui.processor_ui, name='index'),
     path('history/', views_processor_ui.processing_history, name='processing_history'),
+
+    # Drive Explorer
+    path('drive-explorer/', views_drive_explorer.drive_explorer_page, name='drive_explorer_page'),
+    path('api/drive/status/', views_drive_explorer.drive_status, name='api_drive_status'),
+    path('api/drive/list/', views_drive_explorer.drive_list, name='api_drive_list'),
+    path('api/drive/file/<str:file_id>/', views_drive_explorer.drive_file_proxy, name='api_drive_file_proxy'),
+    path('api/drive/upload-original/', views_drive_explorer.drive_upload_original, name='api_drive_upload_original'),
 
     # Processor UI endpoints
     path('upload-document/', views_processor_ui.upload_document, name='upload_document'),

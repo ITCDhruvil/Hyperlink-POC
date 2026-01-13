@@ -39,8 +39,11 @@ def processing_history(request):
     """
     from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
 
-    # Get all processing history, ordered by most recent
-    history_list = ProcessingHistory.objects.all().order_by('-uploaded_at')
+    # Admins see all history; regular users see only their own
+    if request.user.is_staff or request.user.is_superuser:
+        history_list = ProcessingHistory.objects.all().order_by('-uploaded_at')
+    else:
+        history_list = ProcessingHistory.objects.filter(user=request.user).order_by('-uploaded_at')
 
     # Pagination - 10 items per page
     paginator = Paginator(history_list, 10)
@@ -53,11 +56,11 @@ def processing_history(request):
     except EmptyPage:
         history_items = paginator.page(paginator.num_pages)
 
-    # Get statistics
-    total_documents = ProcessingHistory.objects.count()
-    successful_documents = ProcessingHistory.objects.filter(status='SUCCESS').count()
-    failed_documents = ProcessingHistory.objects.filter(status='FAILED').count()
-    pending_documents = ProcessingHistory.objects.filter(status='PENDING').count()
+    # Get statistics (respect same scope as list)
+    total_documents = history_list.count()
+    successful_documents = history_list.filter(status='SUCCESS').count()
+    failed_documents = history_list.filter(status='FAILED').count()
+    pending_documents = history_list.filter(status='PENDING').count()
 
     context = {
         'history_items': history_items,
@@ -99,6 +102,7 @@ def upload_document(request):
         history = ProcessingHistory.objects.create(
             input_filename=uploaded_file.name,
             input_file=uploaded_file,
+            user=request.user,
             status='PENDING'
         )
 
@@ -130,6 +134,9 @@ def process_document(request, document_id):
     try:
         # Get document history
         history = ProcessingHistory.objects.get(id=document_id)
+        if history.user_id is None:
+            history.user = request.user
+            history.save(update_fields=['user'])
         history.status = 'PROCESSING'
         history.save()
 
@@ -374,6 +381,11 @@ def split_pdf_document(request):
             output_dir = os.path.join(settings.MEDIA_ROOT, 'processing', 'splits', job_id)
             os.makedirs(output_dir, exist_ok=True)
 
+            import shutil
+            original_name = 'original.pdf'
+            original_path = os.path.join(output_dir, original_name)
+            shutil.copyfile(input_path, original_path)
+
             outputs = []
             for grp in groups:
                 label = grp['label']
@@ -402,6 +414,7 @@ def split_pdf_document(request):
                 'total_pages': total_pages,
                 'count': len(outputs),
                 'files': outputs,
+                'original_url': f"{settings.MEDIA_URL}processing/splits/{job_id}/{original_name}",
                 'download_all_url': f"/download-split-zip/{job_id}/"
             })
 
@@ -900,7 +913,7 @@ def download_split_zip(request, job_id: str):
         if not os.path.isdir(base_dir):
             return JsonResponse({'success': False, 'error': 'Split job not found'}, status=404)
 
-        pdf_files = [f for f in os.listdir(base_dir) if f.lower().endswith('.pdf')]
+        pdf_files = [f for f in os.listdir(base_dir) if f.lower().endswith('.pdf') and f.lower() != 'original.pdf']
         if not pdf_files:
             return JsonResponse({'success': False, 'error': 'No split PDFs found'}, status=404)
 

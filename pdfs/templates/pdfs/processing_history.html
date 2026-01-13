@@ -366,11 +366,28 @@
         <!-- Header -->
         <div class="header">
             <h1>Processing History</h1>
+            {% if filter_user %}
+            <p>
+                Showing history for: <strong>{{ filter_user.email }}</strong>
+                {% if include_unassigned %}
+                <span class="muted">(including unassigned)</span>
+                {% endif %}
+            </p>
+            {% else %}
             <p>View all processed documents and their status</p>
+            {% endif %}
+            
             <div class="nav-buttons">
                 <a href="/" class="nav-btn nav-btn-primary">Back to Processor</a>
                 {% if user.is_staff %}
                 <a href="/users/" class="nav-btn nav-btn-secondary">User Management</a>
+                {% endif %}
+                {% if filter_user %}
+                    {% if include_unassigned %}
+                    <a href="/users/{{ filter_user.id }}/history/" class="nav-btn nav-btn-secondary">Hide Unassigned</a>
+                    {% else %}
+                    <a href="/users/{{ filter_user.id }}/history/?include_unassigned=1" class="nav-btn nav-btn-secondary">Include Unassigned</a>
+                    {% endif %}
                 {% endif %}
                 <a href="{% url 'pdfs:logout' %}" class="nav-btn nav-btn-secondary">Logout</a>
             </div>

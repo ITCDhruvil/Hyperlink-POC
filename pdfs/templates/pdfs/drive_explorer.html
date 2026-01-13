@@ -1,0 +1,654 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Google Drive Explorer</title>
+    <style>
+        body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 0; background: #f6f7fb; color: #111827; }
+        .container { max-width: 1200px; margin: 0 auto; padding: 16px; }
+        .card { background: #fff; border: 1px solid #e5e7eb; border-radius: 10px; padding: 16px; }
+        .row { display: flex; gap: 16px; align-items: flex-start; }
+        .col { flex: 1; }
+        .header { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 12px; }
+        .status { padding: 6px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; }
+        .status.connected { background: #ecfdf5; color: #065f46; border: 1px solid #a7f3d0; }
+        .status.error { background: #fef2f2; color: #991b1b; border: 1px solid #fecaca; }
+        .meta { display: grid; grid-template-columns: 220px 1fr; gap: 6px 12px; font-size: 13px; }
+        .meta .k { color: #6b7280; }
+        .toolbar { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin: 12px 0; }
+        .breadcrumbs { font-size: 13px; color: #374151; }
+        .breadcrumbs a { color: #2563eb; text-decoration: none; cursor: pointer; }
+        .breadcrumbs a:hover { text-decoration: underline; }
+        table { width: 100%; border-collapse: collapse; background: #fff; }
+        th, td { text-align: left; padding: 10px; border-bottom: 1px solid #e5e7eb; font-size: 13px; }
+        th { background: #f9fafb; color: #374151; font-weight: 600; }
+        tr:hover td { background: #fafafa; }
+        .nameCell { display: flex; align-items: center; gap: 10px; }
+        .icon { width: 18px; height: 18px; display: inline-flex; align-items: center; justify-content: center; border-radius: 6px; border: 1px solid #e5e7eb; font-size: 12px; color: #111827; background: #fff; }
+        .icon.folder { background: #eff6ff; border-color: #bfdbfe; color: #1d4ed8; }
+        .icon.file { background: #f3f4f6; }
+        .nameBtn { background: transparent; border: none; padding: 0; margin: 0; color: #111827; font: inherit; cursor: pointer; }
+        .nameBtn.folder { color: #1d4ed8; }
+        .nameBtn.folder:hover { text-decoration: underline; }
+        .muted { color: #6b7280; }
+        .tag { display: inline-flex; align-items: center; border-radius: 999px; padding: 4px 8px; font-size: 12px; font-weight: 600; border: 1px solid #e5e7eb; background: #fff; color: #374151; }
+        .tagRow { display: flex; flex-wrap: wrap; gap: 6px; }
+        .tag.ok { background: #ecfdf5; color: #065f46; border-color: #a7f3d0; }
+        .tag.bad { background: #fef2f2; color: #991b1b; border-color: #fecaca; }
+        .tag.info { background: #eff6ff; color: #1d4ed8; border-color: #bfdbfe; }
+        .errorBox { margin-top: 10px; padding: 10px; border-radius: 8px; border: 1px solid #fecaca; background: #fef2f2; color: #991b1b; font-size: 13px; display: none; }
+        .actions { display: flex; gap: 8px; }
+        button { border: 1px solid #d1d5db; background: #fff; border-radius: 8px; padding: 8px 10px; cursor: pointer; font-size: 13px; }
+        button:hover { background: #f9fafb; }
+        .pagination { display: flex; justify-content: space-between; align-items: center; margin-top: 10px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div style="display:flex; align-items:center; gap:10px;">
+                <button id="backBtn" type="button" aria-label="Back" title="Back" style="border: 1px solid #d1d5db; background: #fff; border-radius: 8px; width: 36px; height: 36px; padding: 0; display:flex; align-items:center; justify-content:center;">
+                    <span style="font-size:18px; line-height:1;">&larr;</span>
+                </button>
+                <h2 style="margin: 0;">Google Drive Explorer</h2>
+            </div>
+            <div id="connectionStatus" class="status">Loading...</div>
+        </div>
+
+        <div class="card" style="margin-bottom: 12px;">
+            <div class="meta">
+                <div class="k">Account</div>
+                <div id="accountLine" class="v muted">-</div>
+
+                <div class="k">Root Folder</div>
+                <div id="rootFolderLine" class="v muted">-</div>
+
+                <div class="k">Root Folder ID</div>
+                <div id="rootFolderIdLine" class="v muted">-</div>
+
+                <div class="k">Permission</div>
+                <div id="permissionLine" class="v muted">-</div>
+            </div>
+            <div id="statusError" class="errorBox"></div>
+        </div>
+
+        <div class="card">
+            <div class="toolbar">
+                <div class="breadcrumbs" id="breadcrumbs"></div>
+                <div class="actions">
+                    <button id="compareBtn" type="button" style="display:none;">Compare Splits</button>
+                    <button id="uploadOriginalBtn" type="button" style="display:none;">Upload Original</button>
+                    <button id="refreshBtn" type="button">Refresh</button>
+                </div>
+            </div>
+
+            <table>
+                <thead>
+                    <tr>
+                        <th style="width: 45%;">Name</th>
+                        <th style="width: 12%;">Type</th>
+                        <th style="width: 18%;">Last modified</th>
+                        <th style="width: 12%;">Size</th>
+                        <th style="width: 13%;">Owner</th>
+                    </tr>
+                </thead>
+                <tbody id="itemsBody">
+                    <tr><td colspan="5" class="muted">Loading...</td></tr>
+                </tbody>
+            </table>
+
+            <div class="pagination">
+                <div class="muted" id="pageInfo"></div>
+                <div class="actions">
+                    <button id="prevBtn" type="button" style="display:none;">Prev</button>
+                    <button id="nextBtn" type="button" style="display:none;">Next</button>
+                </div>
+            </div>
+
+            <div id="listError" class="errorBox"></div>
+        </div>
+    </div>
+
+    <div id="compareModal" class="modalOverlay" role="dialog" aria-modal="true" aria-hidden="true" style="position: fixed; inset: 0; background: rgba(0,0,0,0.45); display: none; align-items: center; justify-content: center; padding: 20px; z-index: 9999;">
+        <div class="modal" style="background: #fff; border: 1px solid #e5e7eb; border-radius: 10px; max-width: 1200px; width: 100%; padding: 16px;">
+            <div class="modalHeader" style="display:flex; justify-content: space-between; align-items:center; gap: 12px; margin-bottom: 8px;">
+                <div style="font-weight:700;">Compare Splits</div>
+                <button id="compareCloseBtn" type="button" aria-label="Close">Close</button>
+            </div>
+            <div class="modalBody" style="font-size: 13px; color: #111827; line-height: 1.5;">
+                <div id="compareButtons" style="display:flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px;"></div>
+                <div style="display:flex; gap: 10px;">
+                    <div style="flex: 1;">
+                        <div style="font-size: 13px; color: #666; margin-bottom: 6px;">Split</div>
+                        <iframe id="compareSplitFrame" style="width: 100%; height: 560px; border: 1px solid #e5e7eb; border-radius: 8px;"></iframe>
+                    </div>
+                    <div style="flex: 1;">
+                        <div style="font-size: 13px; color: #666; margin-bottom: 6px;">Original</div>
+                        <iframe id="compareOriginalFrame" style="width: 100%; height: 560px; border: 1px solid #e5e7eb; border-radius: 8px;"></iframe>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+<script>
+(function(){
+    const statusEl = document.getElementById('connectionStatus');
+    const accountLine = document.getElementById('accountLine');
+    const rootFolderLine = document.getElementById('rootFolderLine');
+    const rootFolderIdLine = document.getElementById('rootFolderIdLine');
+    const permissionLine = document.getElementById('permissionLine');
+    const statusError = document.getElementById('statusError');
+
+    const breadcrumbsEl = document.getElementById('breadcrumbs');
+    const itemsBody = document.getElementById('itemsBody');
+    const listError = document.getElementById('listError');
+    const refreshBtn = document.getElementById('refreshBtn');
+    const backBtn = document.getElementById('backBtn');
+    const prevBtn = document.getElementById('prevBtn');
+    const nextBtn = document.getElementById('nextBtn');
+    const pageInfo = document.getElementById('pageInfo');
+
+    const compareBtn = document.getElementById('compareBtn');
+    const uploadOriginalBtn = document.getElementById('uploadOriginalBtn');
+    const compareModal = document.getElementById('compareModal');
+    const compareCloseBtn = document.getElementById('compareCloseBtn');
+    const compareButtons = document.getElementById('compareButtons');
+    const compareSplitFrame = document.getElementById('compareSplitFrame');
+    const compareOriginalFrame = document.getElementById('compareOriginalFrame');
+
+    const originalFileInput = document.createElement('input');
+    originalFileInput.type = 'file';
+    originalFileInput.accept = 'application/pdf,.pdf';
+    originalFileInput.style.display = 'none';
+    document.body.appendChild(originalFileInput);
+
+    let rootFolderId = null;
+    let pathStack = []; // [{id,name}]
+    let nextPageToken = null;
+    let currentPageToken = null;
+    let pageTokenStack = [];
+    let loadedCount = 0;
+    let pageSize = 8;
+    let currentPage = 1;
+
+    let lastFolderItems = [];
+    let lastFolderId = null;
+
+    const folderItemsCache = {}; // folderId -> { items: [], fetchedAll: bool }
+
+    function setStatus(connected){
+        statusEl.classList.remove('connected','error');
+        if (connected) {
+            statusEl.textContent = 'Connected';
+            statusEl.classList.add('connected');
+        } else {
+            statusEl.textContent = 'Error';
+            statusEl.classList.add('error');
+        }
+    }
+
+    async function fetchAllFolderItems(folderId){
+        if (!folderId) return [];
+        const existing = folderItemsCache[folderId];
+        if (existing && existing.fetchedAll) return existing.items || [];
+
+        let all = [];
+        let token = null;
+        for (let i = 0; i < 50; i++) {
+            const url = new URL('/api/drive/list/', window.location.origin);
+            url.searchParams.set('folder_id', folderId);
+            if (token) url.searchParams.set('pageToken', token);
+            const data = await fetchJson(url.toString());
+            const items = Array.isArray(data.items) ? data.items : [];
+            all = all.concat(items);
+            token = data.nextPageToken || null;
+            if (!token) break;
+        }
+
+        folderItemsCache[folderId] = { items: all, fetchedAll: true };
+        return all;
+    }
+
+    function showError(el, message){
+        if (!message) {
+            el.style.display = 'none';
+            el.textContent = '';
+            return;
+        }
+        el.style.display = 'block';
+        el.textContent = message;
+    }
+
+    function formatSize(bytes){
+        if (bytes === null || bytes === undefined) return '-';
+        const units = ['B','KB','MB','GB','TB'];
+        let v = bytes;
+        let i = 0;
+        while (v >= 1024 && i < units.length - 1) { v = v / 1024; i++; }
+        const rounded = i === 0 ? String(Math.round(v)) : v.toFixed(1);
+        return `${rounded} ${units[i]}`;
+    }
+
+    function formatDate(iso){
+        if (!iso) return '-';
+        try {
+            const d = new Date(iso);
+            return d.toLocaleString();
+        } catch {
+            return iso;
+        }
+    }
+
+    function toDateValue(iso){
+        if (!iso) return 0;
+        const t = Date.parse(iso);
+        return Number.isFinite(t) ? t : 0;
+    }
+
+    function renderBreadcrumbs(){
+        if (!pathStack.length) {
+            breadcrumbsEl.innerHTML = '<span class="muted">-</span>';
+            return;
+        }
+        const parts = pathStack.map((p, idx) => {
+            if (idx === pathStack.length - 1) {
+                return `<span>${escapeHtml(p.name)}</span>`;
+            }
+            return `<a data-idx="${idx}">${escapeHtml(p.name)}</a>`;
+        });
+
+        breadcrumbsEl.innerHTML = parts.join(' <span class="muted">/</span> ');
+        breadcrumbsEl.querySelectorAll('a[data-idx]').forEach(a => {
+            a.addEventListener('click', () => {
+                const idx = parseInt(a.getAttribute('data-idx'), 10);
+                pathStack = pathStack.slice(0, idx + 1);
+                loadFolder(pathStack[pathStack.length - 1].id, { reset: true });
+            });
+        });
+    }
+
+    function escapeHtml(s){
+        return String(s ?? '').replace(/[&<>\"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;','\'':'&#39;'}[c]));
+    }
+
+    function renderRows(items, append){
+        if (!append) {
+            itemsBody.innerHTML = '';
+            loadedCount = 0;
+        }
+
+        if (!items.length && !append) {
+            itemsBody.innerHTML = '<tr><td colspan="5" class="muted">(Empty folder)</td></tr>';
+            return;
+        }
+
+        const rowsHtml = items.map(it => {
+            const icon = it.isFolder ? '<span class="icon folder">F</span>' : '<span class="icon file">Fi</span>';
+            const name = escapeHtml(it.name);
+            const type = it.isFolder ? 'Folder' : 'File';
+            const modified = formatDate(it.modifiedTime);
+            const size = it.isFolder ? '-' : formatSize(it.size);
+            const owner = (it.owners && it.owners.length) ? (it.owners[0].emailAddress || it.owners[0].displayName || '-') : '-';
+
+            const nameCell = it.isFolder
+                ? `<button class="nameBtn folder" data-folder-id="${escapeHtml(it.id)}" data-folder-name="${name}">${name}</button>`
+                : `<span>${name}</span>`;
+
+            return `
+                <tr>
+                    <td>
+                        <div class="nameCell">${icon}${nameCell}</div>
+                    </td>
+                    <td>${type}</td>
+                    <td>${escapeHtml(modified)}</td>
+                    <td>${escapeHtml(size)}</td>
+                    <td>${escapeHtml(owner)}</td>
+                </tr>
+            `;
+        }).join('');
+
+        if (append) {
+            itemsBody.insertAdjacentHTML('beforeend', rowsHtml);
+        } else {
+            itemsBody.innerHTML = rowsHtml;
+        }
+
+        loadedCount += items.length;
+        pageInfo.textContent = `Page ${currentPage}${pageSize ? ` (showing up to ${pageSize} items)` : ''}`;
+
+        itemsBody.querySelectorAll('button[data-folder-id]').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const id = btn.getAttribute('data-folder-id');
+                const name = btn.getAttribute('data-folder-name');
+                pathStack.push({ id, name });
+                renderBreadcrumbs();
+                loadFolder(id, { reset: true });
+            });
+        });
+    }
+
+    function getStartPageFromName(name){
+        const m = String(name || '').match(/\d+/);
+        if (!m) return 1;
+        const n = parseInt(m[0], 10);
+        return Number.isFinite(n) && n > 0 ? n : 1;
+    }
+
+    function setCompareAvailability(){
+        if (!compareBtn) return;
+        const cache = lastFolderId ? folderItemsCache[lastFolderId] : null;
+        const items = cache && Array.isArray(cache.items) ? cache.items : (Array.isArray(lastFolderItems) ? lastFolderItems : []);
+        const original = items.find(it => !it.isFolder && String(it.name || '').toLowerCase() === 'original.pdf');
+        const splits = items.filter(it => !it.isFolder && String(it.name || '').toLowerCase().endsWith('.pdf') && String(it.name || '').toLowerCase() !== 'original.pdf' && /\d/.test(String(it.name || '')));
+
+        if (lastFolderId && original && splits.length) {
+            compareBtn.style.display = 'inline-block';
+        } else {
+            compareBtn.style.display = 'none';
+        }
+
+        if (uploadOriginalBtn) {
+            if (lastFolderId && !original && splits.length) {
+                uploadOriginalBtn.style.display = 'inline-block';
+            } else {
+                uploadOriginalBtn.style.display = 'none';
+            }
+        }
+    }
+
+    async function uploadOriginal(file){
+        if (!lastFolderId) throw new Error('No folder selected');
+        const fd = new FormData();
+        fd.append('folder_id', lastFolderId);
+        fd.append('file', file);
+
+        const res = await fetch('/api/drive/upload-original/', {
+            method: 'POST',
+            body: fd,
+            credentials: 'same-origin'
+        });
+        const ct = (res.headers.get('content-type') || '').toLowerCase();
+        const data = ct.includes('application/json')
+            ? await res.json().catch(() => null)
+            : null;
+
+        if (!res.ok) {
+            const msg = (data && (data.error?.message || data.error || data.message)) || `HTTP ${res.status}`;
+            throw new Error(msg);
+        }
+
+        if (!data) {
+            throw new Error('Unexpected response from server. Please refresh the page and try again.');
+        }
+
+        return data;
+    }
+
+    function openCompare(){
+        (async () => {
+            const items = await fetchAllFolderItems(lastFolderId);
+            const original = items.find(it => !it.isFolder && String(it.name || '').toLowerCase() === 'original.pdf');
+            const splits = items
+                .filter(it => !it.isFolder && String(it.name || '').toLowerCase().endsWith('.pdf') && String(it.name || '').toLowerCase() !== 'original.pdf' && /\d/.test(String(it.name || '')))
+                .slice()
+                .sort((a,b) => getStartPageFromName(a.name) - getStartPageFromName(b.name));
+
+            if (!original || !splits.length) return;
+
+        const originalSrc = `/api/drive/file/${encodeURIComponent(original.id)}/`;
+        if (compareButtons) compareButtons.innerHTML = '';
+        if (compareSplitFrame) compareSplitFrame.removeAttribute('src');
+        if (compareOriginalFrame) compareOriginalFrame.removeAttribute('src');
+
+        function selectSplit(it){
+            const splitSrc = `/api/drive/file/${encodeURIComponent(it.id)}/`;
+            const start = getStartPageFromName(it.name);
+            if (compareSplitFrame) compareSplitFrame.src = splitSrc;
+            if (compareOriginalFrame) compareOriginalFrame.src = `${originalSrc}#page=${start}`;
+        }
+
+        if (compareButtons) {
+            splits.forEach((it) => {
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.textContent = String(it.name || '').replace(/\.pdf$/i, '');
+                btn.onclick = () => selectSplit(it);
+                compareButtons.appendChild(btn);
+            });
+        }
+
+            selectSplit(splits[0]);
+
+            compareModal.style.display = 'flex';
+            compareModal.setAttribute('aria-hidden', 'false');
+        })().catch((e) => {
+            showError(listError, e.message);
+        });
+    }
+
+    function closeCompare(){
+        compareModal.style.display = 'none';
+        compareModal.setAttribute('aria-hidden', 'true');
+        if (compareSplitFrame) compareSplitFrame.removeAttribute('src');
+        if (compareOriginalFrame) compareOriginalFrame.removeAttribute('src');
+    }
+
+    if (compareBtn) compareBtn.addEventListener('click', openCompare);
+    if (uploadOriginalBtn) uploadOriginalBtn.addEventListener('click', () => {
+        originalFileInput.value = '';
+        originalFileInput.click();
+    });
+
+    originalFileInput.addEventListener('change', async () => {
+        const file = originalFileInput.files && originalFileInput.files[0];
+        if (!file) return;
+        try {
+            await uploadOriginal(file);
+            await loadFolder(lastFolderId, { reset: true });
+        } catch (e) {
+            showError(listError, e.message);
+        }
+    });
+
+    if (compareCloseBtn) compareCloseBtn.addEventListener('click', closeCompare);
+    if (compareModal) compareModal.addEventListener('click', (e) => { if (e.target === compareModal) closeCompare(); });
+
+    async function fetchJson(url){
+        const res = await fetch(url, { credentials: 'same-origin' });
+        const ct = (res.headers.get('content-type') || '').toLowerCase();
+        const data = ct.includes('application/json')
+            ? await res.json().catch(() => null)
+            : null;
+
+        if (!res.ok) {
+            const msg = (data && (data.error?.message || data.error || data.message)) || `HTTP ${res.status}`;
+            throw new Error(msg);
+        }
+
+        if (!data) {
+            throw new Error('Unexpected response from server. Please refresh the page (you may need to log in again).');
+        }
+
+        return data;
+    }
+
+    async function loadStatus(){
+        showError(statusError, null);
+        const url = new URL('/api/drive/status/', window.location.origin);
+        const data = await fetchJson(url.toString());
+
+        setStatus(!!data.connected);
+
+        const account = data.account || {};
+        const email = account.emailAddress || '-';
+        const name = account.displayName || '';
+        accountLine.textContent = name ? `${name} (${email})` : email;
+
+        const root = data.rootFolder || {};
+        rootFolderId = data.rootFolderId || data.rootFolder?.id || null;
+
+        rootFolderLine.textContent = root.name ? `${root.name}` : '-';
+        rootFolderIdLine.textContent = rootFolderId || '-';
+
+        const scopes = Array.isArray(data.scopes) ? data.scopes : [];
+
+        const caps = root.capabilities || {};
+        const canEdit = !!caps.canEdit;
+        const canAddChildren = !!caps.canAddChildren;
+        const canShare = !!caps.canShare;
+        const effectiveWritable = canEdit || canAddChildren || canShare;
+
+        const accessTag = effectiveWritable
+            ? { text: 'Writable', cls: 'ok' }
+            : { text: 'Read-only', cls: 'bad' };
+
+        const tags = [accessTag];
+        if (canEdit) tags.push({ text: 'Edit', cls: 'ok' });
+        if (canAddChildren) tags.push({ text: 'Add', cls: 'ok' });
+        if (canShare) tags.push({ text: 'Share', cls: 'ok' });
+        tags.push({ text: `Scopes:${scopes.length || 0}`, cls: 'info' });
+
+        const tooltip = [
+            `Folder access: ${effectiveWritable ? 'Writable' : 'Read-only'}`,
+            `canEdit=${canEdit}`,
+            `canAddChildren=${canAddChildren}`,
+            `canShare=${canShare}`,
+            `scopes=${scopes.join(', ') || 'unknown'}`,
+        ].join(' | ');
+
+        permissionLine.title = tooltip;
+        permissionLine.classList.remove('muted');
+        permissionLine.innerHTML = `<div class="tagRow">${tags.map(t => `<span class="tag ${t.cls}">${t.text}</span>`).join('')}</div>`;
+
+        if (!data.connected) {
+            showError(statusError, data.error?.message || 'Drive connection error');
+        }
+
+        return data;
+    }
+
+    async function loadFolder(folderId, opts){
+        const reset = !!(opts && opts.reset);
+        const pageToken = (opts && Object.prototype.hasOwnProperty.call(opts, 'pageToken')) ? opts.pageToken : null;
+        showError(listError, null);
+
+        if (reset) {
+            nextPageToken = null;
+            currentPageToken = null;
+            pageTokenStack = [];
+            currentPage = 1;
+            pageInfo.textContent = '';
+            itemsBody.innerHTML = '<tr><td colspan="5" class="muted">Loading...</td></tr>';
+        }
+
+        const url = new URL('/api/drive/list/', window.location.origin);
+        url.searchParams.set('folder_id', folderId);
+        if (pageToken) {
+            url.searchParams.set('pageToken', pageToken);
+        }
+
+        const data = await fetchJson(url.toString());
+        pageSize = data.pageSize || pageSize;
+        currentPageToken = pageToken;
+        nextPageToken = data.nextPageToken || null;
+
+        prevBtn.style.display = pageTokenStack.length ? 'inline-block' : 'none';
+        nextBtn.style.display = nextPageToken ? 'inline-block' : 'none';
+
+        const items = data.items || [];
+        items.sort((a,b) => {
+            if (a.isFolder !== b.isFolder) return a.isFolder ? -1 : 1;
+
+            if (a.isFolder && b.isFolder) {
+                const da = toDateValue(a.createdTime) || toDateValue(a.modifiedTime);
+                const db = toDateValue(b.createdTime) || toDateValue(b.modifiedTime);
+                if (da !== db) return db - da;
+            }
+
+            return String(a.name || '').localeCompare(String(b.name || ''));
+        });
+
+        renderRows(items, false);
+
+        lastFolderItems = items;
+        lastFolderId = folderId;
+        folderItemsCache[folderId] = { items, fetchedAll: false };
+        setCompareAvailability();
+
+        fetchAllFolderItems(folderId)
+            .then(() => setCompareAvailability())
+            .catch(() => {});
+    }
+
+    refreshBtn.addEventListener('click', async () => {
+        try {
+            await loadStatus();
+            if (pathStack.length) {
+                await loadFolder(pathStack[pathStack.length - 1].id, { reset: true });
+            } else if (rootFolderId) {
+                pathStack = [{ id: rootFolderId, name: 'Root' }];
+                renderBreadcrumbs();
+                await loadFolder(rootFolderId, { reset: true });
+            }
+        } catch (e) {
+            showError(listError, e.message);
+        }
+    });
+
+    backBtn.addEventListener('click', () => {
+        window.location.href = '/';
+    });
+
+    nextBtn.addEventListener('click', async () => {
+        try {
+            if (!pathStack.length) return;
+            if (!nextPageToken) return;
+            if (currentPageToken) {
+                pageTokenStack.push(currentPageToken);
+            } else {
+                pageTokenStack.push('__ROOT__');
+            }
+            currentPage += 1;
+            await loadFolder(pathStack[pathStack.length - 1].id, { reset: false, pageToken: nextPageToken });
+        } catch (e) {
+            showError(listError, e.message);
+        }
+    });
+
+    prevBtn.addEventListener('click', async () => {
+        try {
+            if (!pathStack.length) return;
+            const prev = pageTokenStack.pop();
+            currentPage = Math.max(1, currentPage - 1);
+            if (prev === '__ROOT__') {
+                await loadFolder(pathStack[pathStack.length - 1].id, { reset: false, pageToken: null });
+                return;
+            }
+            await loadFolder(pathStack[pathStack.length - 1].id, { reset: false, pageToken: prev });
+        } catch (e) {
+            showError(listError, e.message);
+        }
+    });
+
+    (async function init(){
+        try {
+            const st = await loadStatus();
+            if (!st.connected || !rootFolderId) {
+                renderBreadcrumbs();
+                return;
+            }
+            pathStack = [{ id: rootFolderId, name: st.rootFolder?.name || 'Root' }];
+            renderBreadcrumbs();
+            await loadFolder(rootFolderId, { reset: true });
+        } catch (e) {
+            setStatus(false);
+            showError(statusError, e.message);
+            showError(listError, e.message);
+        }
+    })();
+})();
+</script>
+</body>
+</html>

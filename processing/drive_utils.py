@@ -5,23 +5,27 @@ from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
 from googleapiclient.errors import HttpError
+import httplib2
+from google_auth_httplib2 import AuthorizedHttp
 from django.conf import settings
-from typing import Tuple, Optional
+from typing import Tuple, Optional, Dict
 import os
 
 
 class DriveService:
     """Google Drive API service wrapper"""
     
-    def __init__(self):
+    def __init__(self, credentials_path: str, root_folder_id: Optional[str] = None):
         self.credentials = None
         self.service = None
+        self.credentials_path = credentials_path
+        self.root_folder_id = root_folder_id
         self._initialize_service()
     
     def _initialize_service(self):
         """Initialize Google Drive API service"""
         try:
-            credentials_path = settings.GOOGLE_DRIVE_CREDENTIALS_PATH
+            credentials_path = self.credentials_path
             
             if not os.path.exists(credentials_path):
                 raise FileNotFoundError(
@@ -29,18 +33,93 @@ class DriveService:
                     "Please place your service account JSON key file there."
                 )
             
-            SCOPES = ['https://www.googleapis.com/auth/drive.file']
+            SCOPES = [
+                'https://www.googleapis.com/auth/drive.file',
+                'https://www.googleapis.com/auth/drive.metadata.readonly',
+            ]
             
             self.credentials = service_account.Credentials.from_service_account_file(
                 credentials_path,
                 scopes=SCOPES
             )
-            
-            self.service = build('drive', 'v3', credentials=self.credentials)
+
+            for k in ('HTTPS_PROXY', 'HTTP_PROXY', 'https_proxy', 'http_proxy', 'NO_PROXY', 'no_proxy'):
+                if k in os.environ:
+                    os.environ.pop(k, None)
+
+            http = httplib2.Http(proxy_info=None)
+            authed_http = AuthorizedHttp(self.credentials, http=http)
+            self.service = build('drive', 'v3', http=authed_http, cache_discovery=False)
             
         except Exception as e:
             print(f"Error initializing Drive service: {e}")
             raise
+    
+    def get_account_info(self) -> Dict:
+        """Get authenticated account display name and email (service account or delegated user)."""
+        try:
+            about = self.service.about().get(
+                fields='user(displayName,emailAddress)'
+            ).execute()
+            user = about.get('user', {})
+            return {
+                'displayName': user.get('displayName'),
+                'emailAddress': user.get('emailAddress'),
+            }
+        except HttpError as error:
+            return {
+                'error': {
+                    'message': str(error),
+                    'status_code': getattr(error, 'status_code', None),
+                }
+            }
+
+    def get_folder_metadata(self, folder_id: str) -> Dict:
+        """Get folder metadata for a given folder_id."""
+        try:
+            folder = self.service.files().get(
+                fileId=folder_id,
+                fields='id,name,mimeType,createdTime,modifiedTime,size,owners(displayName,emailAddress),capabilities(canAddChildren,canDelete,canEdit,canMoveChildrenOutOfDrive,canRemoveChildren,canRename,canShare)',
+                supportsAllDrives=True
+            ).execute()
+            return folder
+        except HttpError as error:
+            return {
+                'error': {
+                    'message': str(error),
+                    'status_code': getattr(error, 'status_code', None),
+                }
+            }
+
+    def list_folder_children(
+        self,
+        folder_id: str,
+        page_token: Optional[str] = None,
+        page_size: int = 100,
+    ) -> Dict:
+        """List files/folders directly under folder_id with pagination."""
+        try:
+            query = f"'{folder_id}' in parents and trashed=false"
+            result = self.service.files().list(
+                q=query,
+                spaces='drive',
+                fields='nextPageToken, files(id,name,mimeType,createdTime,modifiedTime,size,owners(displayName,emailAddress))',
+                pageSize=page_size,
+                pageToken=page_token,
+                includeItemsFromAllDrives=True,
+                supportsAllDrives=True,
+            ).execute()
+            return {
+                'files': result.get('files', []),
+                'nextPageToken': result.get('nextPageToken'),
+            }
+        except HttpError as error:
+            return {
+                'error': {
+                    'message': str(error),
+                    'status_code': getattr(error, 'status_code', None),
+                }
+            }
     
     def create_folder(self, folder_name: str, parent_id: Optional[str] = None) -> str:
         """
@@ -55,8 +134,8 @@ class DriveService:
             
             if parent_id:
                 file_metadata['parents'] = [parent_id]
-            elif settings.GOOGLE_DRIVE_ROOT_FOLDER_ID:
-                file_metadata['parents'] = [settings.GOOGLE_DRIVE_ROOT_FOLDER_ID]
+            elif self.root_folder_id:
+                file_metadata['parents'] = [self.root_folder_id]
             
             folder = self.service.files().create(
                 body=file_metadata,
@@ -80,8 +159,8 @@ class DriveService:
             
             if parent_id:
                 query += f" and '{parent_id}' in parents"
-            elif settings.GOOGLE_DRIVE_ROOT_FOLDER_ID:
-                query += f" and '{settings.GOOGLE_DRIVE_ROOT_FOLDER_ID}' in parents"
+            elif self.root_folder_id:
+                query += f" and '{self.root_folder_id}' in parents"
             
             results = self.service.files().list(
                 q=query,
@@ -122,7 +201,7 @@ class DriveService:
         Returns:
             ID of the deepest folder
         """
-        parent_id = settings.GOOGLE_DRIVE_ROOT_FOLDER_ID or None
+        parent_id = self.root_folder_id or None
         
         for folder_name in path_components:
             parent_id = self.get_or_create_folder(folder_name, parent_id)
@@ -244,9 +323,21 @@ class DriveService:
 # Singleton instance
 _drive_service = None
 
+
+def get_active_drive_root_folder_id() -> Optional[str]:
+    return getattr(settings, 'GOOGLE_DRIVE_ROOT_FOLDER_ID', None)
+
+
+def get_active_drive_credentials_path() -> str:
+    return settings.GOOGLE_DRIVE_CREDENTIALS_PATH
+
 def get_drive_service() -> DriveService:
     """Get or create Drive service singleton"""
     global _drive_service
+
     if _drive_service is None:
-        _drive_service = DriveService()
+        credentials_path = get_active_drive_credentials_path()
+        root_folder_id = get_active_drive_root_folder_id()
+        _drive_service = DriveService(credentials_path=credentials_path, root_folder_id=root_folder_id)
+
     return _drive_service

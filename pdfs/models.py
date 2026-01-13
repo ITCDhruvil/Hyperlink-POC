@@ -1,6 +1,6 @@
 from django.db import models
 from django.core.validators import MinValueValidator
-
+from django.conf import settings
 
 class Patient(models.Model):
     """Patient information"""
@@ -101,6 +101,27 @@ class DriveFolderCache(models.Model):
 
     def __str__(self):
         return f"{self.folder_path} -> {self.drive_folder_id}"
+
+
+class DriveProfile(models.Model):
+    name = models.CharField(max_length=200, unique=True)
+    credentials_file = models.FileField(upload_to='drive_credentials/')
+    root_folder_id = models.CharField(max_length=255, blank=True)
+    is_active = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-is_active', 'name']
+        verbose_name = 'Drive Profile'
+        verbose_name_plural = 'Drive Profiles'
+
+    def __str__(self):
+        return self.name
+
+    @classmethod
+    def get_active_profile(cls):
+        return cls.objects.filter(is_active=True).first()
 
 
 class SummaryDocument(models.Model):
@@ -231,6 +252,14 @@ class ProcessingHistory(models.Model):
     # Input document
     input_filename = models.CharField(max_length=500)
     input_file = models.FileField(upload_to='processing/inputs/%Y/%m/%d/')
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='processing_histories'
+    )
 
     # Output document
     output_filename = models.CharField(max_length=500, blank=True)

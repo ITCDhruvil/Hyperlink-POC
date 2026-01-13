@@ -525,6 +525,7 @@
                         </td>
                         <td>
                             <div class="action-buttons">
+                                <a class="btn btn-sm btn-outline" href="/users/{{ user.id }}/history/">History</a>
                                 {% if not user.is_superuser %}
                                     {% if user.is_staff %}
                                         <button class="btn btn-sm btn-outline" onclick="toggleAdmin({{ user.id }})">Demote</button>

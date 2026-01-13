@@ -161,3 +161,10 @@ LOGIN_URL = '/login/'
 LOGIN_REDIRECT_URL = '/'
 LOGOUT_REDIRECT_URL = '/login/'
 
+# Use unique cookie names so sessions don't collide with other local Django apps
+# running on the same host (cookies are shared across ports).
+SESSION_COOKIE_NAME = 'pdf_automation_sessionid'
+CSRF_COOKIE_NAME = 'pdf_automation_csrftoken'
+
+X_FRAME_OPTIONS = 'SAMEORIGIN'
+

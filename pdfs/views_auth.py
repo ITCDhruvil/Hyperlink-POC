@@ -10,10 +10,58 @@ from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 import re
 
+from .models import ProcessingHistory
+
 
 def is_admin(user):
     """Check if user is staff/admin"""
     return user.is_staff or user.is_superuser
+
+
+@login_required
+@user_passes_test(is_admin)
+def user_processing_history(request, user_id: int):
+    """Admin-only: show processing history for a specific user."""
+    from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
+    from django.db.models import Q
+
+    target_user = get_object_or_404(User, id=user_id)
+
+    include_unassigned = request.GET.get('include_unassigned') in ('1', 'true', 'yes')
+    if include_unassigned:
+        history_list = ProcessingHistory.objects.filter(
+            Q(user=target_user) | Q(user__isnull=True)
+        ).order_by('-uploaded_at')
+    else:
+        history_list = ProcessingHistory.objects.filter(user=target_user).order_by('-uploaded_at')
+
+    paginator = Paginator(history_list, 10)
+    page = request.GET.get('page', 1)
+
+    try:
+        history_items = paginator.page(page)
+    except PageNotAnInteger:
+        history_items = paginator.page(1)
+    except EmptyPage:
+        history_items = paginator.page(paginator.num_pages)
+
+    total_documents = history_list.count()
+    successful_documents = history_list.filter(status='SUCCESS').count()
+    failed_documents = history_list.filter(status='FAILED').count()
+    pending_documents = history_list.filter(status='PENDING').count()
+
+    context = {
+        'history_items': history_items,
+        'total_documents': total_documents,
+        'successful_documents': successful_documents,
+        'failed_documents': failed_documents,
+        'pending_documents': pending_documents,
+        'success_rate': round((successful_documents / total_documents * 100) if total_documents > 0 else 0, 1),
+        'filter_user': target_user,
+        'include_unassigned': include_unassigned,
+    }
+
+    return render(request, 'pdfs/processing_history.html', context)
 
 
 def login_view(request):
