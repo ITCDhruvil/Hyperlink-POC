@@ -457,7 +457,12 @@ def upload_split_to_drive(request, job_id: str):
         if not os.path.isdir(base_dir):
             return JsonResponse({'success': False, 'error': 'Split job not found'}, status=404)
 
-        pdf_files = [f for f in os.listdir(base_dir) if f.lower().endswith('.pdf')]
+        # Do not upload the original input PDF; only upload split outputs
+        pdf_files = [
+            f
+            for f in os.listdir(base_dir)
+            if f.lower().endswith('.pdf') and f.lower() != 'original.pdf'
+        ]
         if not pdf_files:
             return JsonResponse({'success': False, 'error': 'No split PDFs found'}, status=404)
 

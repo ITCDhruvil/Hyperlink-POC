@@ -8,6 +8,7 @@ SIMPLE PATTERN:
 - Result: "04/05/13. Progress Note. US HEALTHWORKS." (linked to 4-9.pdf)
 """
 import re
+import copy
 from typing import Optional, Dict
 from docx import Document
 from docx.shared import Pt
@@ -113,7 +114,12 @@ class WordHyperlinkProcessorSimple:
     """
 
     def __init__(self):
-        self.drive_service = get_drive_service()
+        self.drive_service = None
+
+    def _get_drive_service(self):
+        if self.drive_service is None:
+            self.drive_service = get_drive_service()
+        return self.drive_service
 
     def extract_page_ranges_from_document(self, doc: Document) -> list:
         """
@@ -237,28 +243,34 @@ class WordHyperlinkProcessorSimple:
                 'original_text': 'original...'
             }
         """
-        text = _normalize_page_spec(text)
+        original_text = (text or '').replace('\u00a0', ' ').replace('–', '-').replace('—', '-').replace('‑', '-')
 
-        # Pattern: find page numbers that appear after a period/space
-        # Page spec: digit or range (1-2) or multiple ranges (25-29, 31-35)
-        page_spec_pattern = re.compile(r'(?P<pages>\d+(?:\s*-\s*\d+)?(?:\s*,\s*\d+(?:\s*-\s*\d+)?)*)')
+        # Pattern: digit or range (1-2) or multiple ranges (25-29, 31-35, 40)
+        # We select the candidate closest to the end of the statement and require it to be
+        # followed by either end-of-line / trailing punctuation OR a dot that starts the next
+        # sentence/statement (often ". <letters>").
+        page_spec_pattern = re.compile(
+            r'(?P<pages>\d+(?:\s*-\s*\d+)?(?:\s*,\s*\d+(?:\s*-\s*\d+)?)*)'
+        )
 
         best = None
-        for m in page_spec_pattern.finditer(text):
+        best_rank = None  # tuple: (-complexity, distance_to_end)
+
+        for m in page_spec_pattern.finditer(original_text):
             start, end = m.start('pages'), m.end('pages')
 
             # Reject if part of a date like "06/19/25"
-            if end < len(text) and text[end] == '/':
+            if end < len(original_text) and original_text[end] == '/':
                 continue
-            if start > 0 and text[start - 1] == '/':
+            if start > 0 and original_text[start - 1] == '/':
                 continue
 
             # Reject if part of a decimal number like "0.9" or "164.5"
-            if start > 0 and text[start - 1] == '.':
+            if start > 0 and original_text[start - 1] == '.':
                 continue
 
             # Reject if part of numbered list like "3) Renal mass"
-            if end < len(text) and text[end] == ')':
+            if end < len(original_text) and original_text[end] == ')':
                 continue
 
             pages_raw = (m.group('pages') or '').strip()
@@ -266,65 +278,69 @@ class WordHyperlinkProcessorSimple:
                 continue
 
             # Check if this appears after a period or colon (common separators)
-            # Look backwards to find the nearest punctuation
             if start > 0:
-                # Find what comes before the page number
-                before = text[:start].rstrip()
+                before = original_text[:start].rstrip(' ')
                 if not before:
                     continue
-
-                # Page numbers should appear after punctuation (period, colon) or space
                 if not (before.endswith('.') or before.endswith(':') or before.endswith(' ')):
                     continue
 
-                # Reject if preceded by measurement labels like "SpO2: " or "BP: "
-                # Check last 10 chars before the number
                 context_before = before[-15:] if len(before) >= 15 else before
                 if re.search(r'(SpO2|BP|Pulse|Temp|Weight|RR|P|T):\s*$', context_before, re.IGNORECASE):
                     continue
 
-            # Page numbers appear early in statements (within first ~200 chars)
-            # Medical details with numbers appear much later
-            # Use position check to prefer earlier matches
-            if start > 250:
-                # Only accept this if we haven't found anything yet
-                if best is not None:
+                # Reject common trailing numeric fields (these are not page specs)
+                # Example: "Sessions: 22." or "Visits: 12."
+                context_before_long = before[-30:] if len(before) >= 30 else before
+                if re.search(r'(Sessions?|Visits?|Appts?|Appointments?|Units?):\s*$', context_before_long, re.IGNORECASE):
                     continue
 
-            # Use the FIRST valid page spec match (not the last)
-            # Page numbers appear early, medical details with numbers come later
-            if best is None:
+            # Boundary check: pages should run until end, trailing punctuation, or ". <letters>"
+            j = end
+            while j < len(original_text) and original_text[j].isspace():
+                j += 1
+
+            boundary_ok = False
+            if j >= len(original_text):
+                boundary_ok = True
+            else:
+                ch = original_text[j]
+                # allow trailing punctuation at end of the statement
+                if ch in '.;,:' and j == len(original_text) - 1:
+                    boundary_ok = True
+                elif ch in '.;,:' and j + 1 < len(original_text):
+                    # If this is ". <letters>" treat it as boundary (next statement/sentence starts)
+                    k = j + 1
+                    while k < len(original_text) and original_text[k].isspace():
+                        k += 1
+                    if k < len(original_text) and original_text[k].isalpha():
+                        boundary_ok = True
+
+            if not boundary_ok:
+                continue
+
+            distance_to_end = len(original_text) - end
+            segments = pages_raw.count(',') + 1
+            has_range = 1 if '-' in pages_raw else 0
+            complexity = (segments * 10) + has_range + len(pages_raw)
+            rank = (-complexity, distance_to_end)
+            if best is None or (best_rank is not None and rank < best_rank):
                 best = m
+                best_rank = rank
 
         if best:
             page_spec_raw = (best.group('pages') or '').strip()
             page_spec = _normalize_page_spec(page_spec_raw)
 
-            # Everything before page numbers is the header (description to be hyperlinked)
-            header_text = text[:best.start('pages')].strip()
-
-            # Everything after page numbers is remainder text (kept but not hyperlinked)
-            remainder_text = text[best.end('pages'):].strip()
-
-            # Cleanup spacing
-            def _normalize_spacing(s: str) -> str:
-                s = re.sub(r'\s+', ' ', s)
-                s = re.sub(r'\s+([\.,;:])', r'\1', s)
-                s = re.sub(r'([\.,;:])(?=\S)', r'\1 ', s)
-                return s.strip()
-
-            header_text = _normalize_spacing(header_text)
-            remainder_text = _normalize_spacing(remainder_text)
-
-            # Ensure header ends with period for consistency
-            if header_text and not header_text.endswith('.'):
-                header_text += '.'
+            header_text = original_text[:best.start('pages')]
+            remainder_text = original_text[best.end('pages'):]
 
             return {
                 'page_range': page_spec,
                 'header_text': header_text,
                 'remainder_text': remainder_text,
-                'original_text': text
+                'original_text': original_text,
+                'pages_span': (best.start('pages'), best.end('pages')),
             }
 
         return None
@@ -340,8 +356,220 @@ class WordHyperlinkProcessorSimple:
         Must start with DATE (no numbering prefix required)
         """
         text = (text or '').replace('\u00a0', ' ').strip()
-        # Pattern: starts with date MM/DD/YY or MM/DD/YYYY followed by dot and spaces
-        return bool(re.match(r'^\d{1,2}/\d{1,2}/\d{2,4}\.\s+', text))
+        text = text.replace('–', '-').replace('—', '-').replace('‑', '-')
+        # Pattern: starts with either:
+        # - MM/DD/YY. (or MM/DD/YYYY.)
+        # - MM/DD/YY-MM/DD/YY. (or with spaces around '-')
+        return bool(
+            re.match(
+                r'^\d{1,2}/\d{1,2}/\d{2,4}(?:\s*-\s*\d{1,2}/\d{1,2}/\d{2,4})?\.\s+',
+                text,
+            )
+        )
+
+    def _split_run(self, run, split_at: int):
+        if split_at <= 0 or split_at >= len(run.text or ''):
+            return None
+        tail_text = (run.text or '')[split_at:]
+        run.text = (run.text or '')[:split_at]
+        new_r = OxmlElement('w:r')
+        if run._r.rPr is not None:
+            new_r.append(copy.deepcopy(run._r.rPr))
+        t = OxmlElement('w:t')
+        if tail_text.startswith(' ') or tail_text.endswith(' '):
+            t.set(qn('xml:space'), 'preserve')
+        t.text = tail_text
+        new_r.append(t)
+        run._r.addnext(new_r)
+        return run._parent.add_run()._r.getprevious()
+
+    def _link_statement_in_paragraph(self, paragraph, pages_span: tuple, url: str) -> None:
+        """Option B: remove the page-range text and hyperlink+bold the header text.
+
+        This implementation edits the paragraph XML in-place to preserve spacing and existing
+        formatting for content we do not touch.
+        """
+        start_idx, end_idx = pages_span
+        if start_idx < 0 or end_idx <= start_idx:
+            return
+
+        p = paragraph._p
+
+        def _iter_run_elements():
+            for el in list(p):
+                if el.tag.endswith('}r'):
+                    yield el
+
+        def _run_text(run_el) -> str:
+            texts = []
+            for t in run_el.findall(qn('w:t')):
+                texts.append(t.text or '')
+            return ''.join(texts)
+
+        def _set_run_text(run_el, new_text: str) -> None:
+            ts = run_el.findall(qn('w:t'))
+            if not ts:
+                t = OxmlElement('w:t')
+                run_el.append(t)
+                ts = [t]
+            # keep first, remove the rest
+            for extra in ts[1:]:
+                run_el.remove(extra)
+            t0 = ts[0]
+            if new_text.startswith(' ') or new_text.endswith(' ') or '  ' in new_text:
+                t0.set(qn('xml:space'), 'preserve')
+            t0.text = new_text
+
+        def _split_run_el(run_el, offset: int):
+            txt = _run_text(run_el)
+            if offset <= 0 or offset >= len(txt):
+                return run_el
+            left = txt[:offset]
+            right = txt[offset:]
+            _set_run_text(run_el, left)
+            new_el = copy.deepcopy(run_el)
+            _set_run_text(new_el, right)
+            p.insert(p.index(run_el) + 1, new_el)
+            return new_el
+
+        # Build run spans
+        runs = []
+        acc = 0
+        for r in _iter_run_elements():
+            txt = _run_text(r)
+            if not txt:
+                continue
+            runs.append({'el': r, 'start': acc, 'end': acc + len(txt)})
+            acc += len(txt)
+
+        if not runs:
+            return
+
+        # Split at boundaries so deletion is whole-run
+        for item in list(runs):
+            r = item['el']
+            s = item['start']
+            e = item['end']
+            if s < start_idx < e:
+                _split_run_el(r, start_idx - s)
+                break
+
+        # Recompute spans after potential split
+        runs = []
+        acc = 0
+        for r in _iter_run_elements():
+            txt = _run_text(r)
+            if not txt:
+                continue
+            runs.append({'el': r, 'start': acc, 'end': acc + len(txt)})
+            acc += len(txt)
+
+        for item in list(runs):
+            r = item['el']
+            s = item['start']
+            e = item['end']
+            if s < end_idx < e:
+                _split_run_el(r, end_idx - s)
+                break
+
+        # Recompute spans again
+        runs = []
+        acc = 0
+        for r in _iter_run_elements():
+            txt = _run_text(r)
+            if not txt:
+                continue
+            runs.append({'el': r, 'start': acc, 'end': acc + len(txt)})
+            acc += len(txt)
+
+        # Remove page-range runs
+        for item in list(runs):
+            if item['start'] >= start_idx and item['end'] <= end_idx:
+                p.remove(item['el'])
+
+        # Collect header runs (everything before start_idx)
+        header_runs = []
+        acc = 0
+        for r in _iter_run_elements():
+            txt = _run_text(r)
+            if not txt:
+                continue
+            if acc + len(txt) > start_idx:
+                if acc < start_idx:
+                    _split_run_el(r, start_idx - acc)
+                    # After split, the current run is header part; re-iterate fresh below
+                break
+            header_runs.append(r)
+            acc += len(txt)
+
+        # refresh header_runs after possible split
+        header_runs = []
+        acc = 0
+        for r in _iter_run_elements():
+            txt = _run_text(r)
+            if not txt:
+                continue
+            if acc >= start_idx:
+                break
+            if acc + len(txt) > start_idx:
+                break
+            header_runs.append(r)
+            acc += len(txt)
+
+        if not header_runs:
+            return
+
+        # Create hyperlink and move header runs into it
+        r_id = paragraph.part.relate_to(
+            url,
+            'http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink',
+            is_external=True,
+        )
+        hyperlink = OxmlElement('w:hyperlink')
+        hyperlink.set(qn('r:id'), r_id)
+
+        first_header_run = header_runs[0]
+        insert_pos = p.index(first_header_run)
+
+        def _ensure_rpr(run_el):
+            rpr = run_el.find(qn('w:rPr'))
+            if rpr is None:
+                rpr = OxmlElement('w:rPr')
+                run_el.insert(0, rpr)
+            return rpr
+
+        def _set_bold_and_font(run_el):
+            rpr = _ensure_rpr(run_el)
+            if rpr.find(qn('w:b')) is None:
+                b = OxmlElement('w:b')
+                rpr.append(b)
+
+            rfonts = rpr.find(qn('w:rFonts'))
+            if rfonts is None:
+                rfonts = OxmlElement('w:rFonts')
+                rpr.append(rfonts)
+            rfonts.set(qn('w:ascii'), 'Times New Roman')
+            rfonts.set(qn('w:hAnsi'), 'Times New Roman')
+            rfonts.set(qn('w:eastAsia'), 'Times New Roman')
+            rfonts.set(qn('w:cs'), 'Times New Roman')
+
+            sz = rpr.find(qn('w:sz'))
+            if sz is None:
+                sz = OxmlElement('w:sz')
+                rpr.append(sz)
+            sz.set(qn('w:val'), str(24))
+
+            szcs = rpr.find(qn('w:szCs'))
+            if szcs is None:
+                szcs = OxmlElement('w:szCs')
+                rpr.append(szcs)
+            szcs.set(qn('w:val'), str(24))
+
+        for r in header_runs:
+            _set_bold_and_font(r)
+            hyperlink.append(r)
+
+        p.insert(insert_pos, hyperlink)
 
     def _iter_all_paragraphs(self, doc: Document):
         # Yield normal body paragraphs
@@ -432,9 +660,10 @@ class WordHyperlinkProcessorSimple:
         pdf_links = {}
 
         try:
+            drive_service = self._get_drive_service()
             page_token = None
             while True:
-                results = self.drive_service.service.files().list(
+                results = drive_service.service.files().list(
                     q=f"'{drive_folder_id}' in parents and mimeType='application/pdf' and trashed=false",
                     fields="nextPageToken, files(id, name, webViewLink)",
                     pageSize=1000,
@@ -481,7 +710,6 @@ class WordHyperlinkProcessorSimple:
             output_docx_path = input_docx_path
 
         doc = Document(input_docx_path)
-        self._apply_default_font(doc, font_name='Times New Roman', font_size_pt=12)
 
         stats = {
             'total_statements': 0,
@@ -490,151 +718,58 @@ class WordHyperlinkProcessorSimple:
             'statements': []
         }
 
-        debug_first_lines = []
-        debug_date_matches = 0
-        debug_parsed_matches = 0
-
         for paragraph in self._iter_all_paragraphs(doc):
             raw_text = paragraph.text
             if not raw_text or not raw_text.strip():
                 continue
 
-            if len(debug_first_lines) < 40:
-                debug_first_lines.append(raw_text)
-
-            def _split_statement_chunks(s: str):
-                s = (s or '').replace('\u00a0', ' ').strip()
-                if not s:
-                    return []
-
-                # First, try line-break based splitting
-                parts = [ln.strip() for ln in s.splitlines() if ln.strip()]
-                if len(parts) > 1:
-                    return parts
-
-                # Fallback: some Word docs have multiple statements in one paragraph without line breaks.
-                # Split by repeated date occurrences (no numbering prefix)
-                start_re = re.compile(r'(?:^|\s)\d{1,2}/\d{1,2}/\d{2,4}\.\s+')
-                matches = list(start_re.finditer(s))
-                if len(matches) <= 1:
-                    return [s]
-
-                chunks = []
-                for i, m in enumerate(matches):
-                    start = m.start()
-                    if start > 0 and s[start].isspace():
-                        start += 1
-                    end = matches[i + 1].start() if i + 1 < len(matches) else len(s)
-                    chunk = s[start:end].strip()
-                    if chunk:
-                        chunks.append(chunk)
-                return chunks
-
-            lines = _split_statement_chunks(raw_text)
-            if not lines:
+            normalized_text = (raw_text or '').replace('\u00a0', ' ').replace('–', '-').replace('—', '-').replace('‑', '-')
+            if not self.is_statement_line(normalized_text):
                 continue
 
-            processed_lines = []
-            had_any_statement = False
-
-            for line in lines:
-                normalized_line = (line or '').replace('\u00a0', ' ').replace('–', '-').replace('—', '-')
-
-                if not self.is_statement_line(normalized_line):
-                    processed_lines.append({'kind': 'text', 'text': line})
-                    continue
-
-                debug_date_matches += 1
-
-                statement_info = self.parse_statement_with_page_number(normalized_line)
-                if not statement_info:
-                    processed_lines.append({'kind': 'text', 'text': line})
-                    continue
-
-                debug_parsed_matches += 1
-
-                had_any_statement = True
-                stats['total_statements'] += 1
-                page_range = statement_info['page_range']
-                header_text = statement_info.get('header_text', '')
-                remainder_text = statement_info.get('remainder_text', '')
-
-                if page_range in pdf_links:
-                    drive_link = pdf_links[page_range]
-                    stats['linked_statements'] += 1
-                    processed_lines.append({
-                        'kind': 'segments',
-                        'segments': [
-                            {'kind': 'link', 'text': header_text, 'url': drive_link},
-                            {'kind': 'text', 'text': ((' ' + remainder_text) if remainder_text else '')},
-                        ],
-                        'page_range': page_range,
-                    })
-                    stats['statements'].append({
-                        'page_range': page_range,
-                        'text': header_text,
-                        'status': 'linked',
-                        'drive_link': drive_link
-                    })
-                else:
-                    stats['unlinked_statements'] += 1
-                    # Keep header + remainder as plain text, but remove the page range itself
-                    combined = (header_text + ((' ' + remainder_text) if remainder_text else '')).strip()
-                    processed_lines.append({'kind': 'text', 'text': combined, 'page_range': page_range})
-                    stats['statements'].append({
-                        'page_range': page_range,
-                        'text': header_text,
-                        'status': 'not_found',
-                        'reason': f'No PDF found for pages {page_range}'
-                    })
-
-            # If nothing looked like a statement, don't modify this paragraph
-            if not had_any_statement:
+            statement_info = self.parse_statement_with_page_number(normalized_text)
+            if not statement_info:
                 continue
 
-            # Rebuild paragraph content with hyperlinks and line breaks
-            paragraph.clear()
-            self._remove_paragraph_borders(paragraph)
-            for idx, item in enumerate(processed_lines):
-                if item.get('kind') == 'segments':
-                    for seg in item.get('segments', []):
-                        if seg.get('kind') == 'link':
-                            add_hyperlink(
-                                paragraph,
-                                seg['url'],
-                                seg['text'],
-                                color='0563C1',
-                                underline=True,
-                                bold=True,
-                                font_name='Times New Roman',
-                                font_size_pt=12
-                            )
-                        else:
-                            run = paragraph.add_run(seg.get('text', ''))
-                            run.font.name = 'Times New Roman'
-                            run.font.size = Pt(12)
-                else:
-                    run = paragraph.add_run(item.get('text', ''))
-                    run.font.name = 'Times New Roman'
-                    run.font.size = Pt(12)
+            page_range = statement_info['page_range']
+            pages_span = statement_info.get('pages_span')
+            if not pages_span:
+                continue
 
-                if idx < len(processed_lines) - 1:
-                    paragraph.add_run().add_break()
+            stats['total_statements'] += 1
 
-        self._apply_default_font(doc, font_name='Times New Roman', font_size_pt=12)
+            drive_link = pdf_links.get(page_range)
+            if not drive_link:
+                stats['unlinked_statements'] += 1
+                stats['statements'].append({
+                    'page_range': page_range,
+                    'text': statement_info.get('header_text', ''),
+                    'status': 'not_found',
+                    'reason': f'No PDF found for pages {page_range}'
+                })
+                continue
+
+            try:
+                self._remove_paragraph_borders(paragraph)
+                self._link_statement_in_paragraph(paragraph, pages_span, drive_link)
+            except Exception:
+                stats['unlinked_statements'] += 1
+                stats['statements'].append({
+                    'page_range': page_range,
+                    'text': statement_info.get('header_text', ''),
+                    'status': 'not_found',
+                    'reason': f'Failed to apply hyperlink for pages {page_range}'
+                })
+                continue
+
+            stats['linked_statements'] += 1
+            stats['statements'].append({
+                'page_range': page_range,
+                'text': statement_info.get('header_text', ''),
+                'status': 'linked',
+                'drive_link': drive_link
+            })
+
         self._normalize_tables(doc)
-
-        # Save document
         doc.save(output_docx_path)
-
-        if stats['total_statements'] == 0:
-            print("=" * 80)
-            print("[DEBUG] No statements detected in DOCX for linking")
-            print(f"[DEBUG] Date-like lines matched: {debug_date_matches}")
-            print(f"[DEBUG] Lines parsed with page ranges: {debug_parsed_matches}")
-            print("[DEBUG] First extracted text blocks (repr):")
-            for i, t in enumerate(debug_first_lines[:20]):
-                print(f"  {i+1:02d}: {repr(t)}")
-            print("=" * 80)
-
         return stats

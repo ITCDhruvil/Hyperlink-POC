@@ -17,6 +17,19 @@ from dotenv import load_dotenv
 # Load environment variables
 load_dotenv()
 
+def _unset_invalid_ca_bundle_env(var_name: str) -> None:
+    v = os.environ.get(var_name)
+    if not v:
+        return
+    try:
+        if not os.path.exists(v):
+            os.environ.pop(var_name, None)
+    except Exception:
+        os.environ.pop(var_name, None)
+
+for _k in ('REQUESTS_CA_BUNDLE', 'SSL_CERT_FILE', 'CURL_CA_BUNDLE', 'HTTPLIB2_CA_CERTS'):
+    _unset_invalid_ca_bundle_env(_k)
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -31,8 +44,11 @@ SECRET_KEY = os.getenv('SECRET_KEY', 'W0gz-iqfKukuhn92Xzi_KiV7E7552-_v98Bk12UOM5
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ['testserver', 'localhost', '127.0.0.1']
-
+ALLOWED_HOSTS = [
+    host.strip()
+    for host in os.getenv('ALLOWED_HOSTS', 'testserver,localhost,127.0.0.1,192.168.10.7').split(',')
+    if host.strip()
+]
 
 # Application definition
 
