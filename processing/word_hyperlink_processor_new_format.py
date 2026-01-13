@@ -146,22 +146,28 @@ class WordHyperlinkProcessorNewFormat:
         pdf_links = {}
 
         try:
-            results = self.drive_service.service.files().list(
-                q=f"'{drive_folder_id}' in parents and mimeType='application/pdf' and trashed=false",
-                fields="files(id, name, webViewLink)",
-                pageSize=1000,
-                includeItemsFromAllDrives=True,
-                supportsAllDrives=True
-            ).execute()
+            page_token = None
+            while True:
+                results = self.drive_service.service.files().list(
+                    q=f"'{drive_folder_id}' in parents and mimeType='application/pdf' and trashed=false",
+                    fields="nextPageToken, files(id, name, webViewLink)",
+                    pageSize=1000,
+                    pageToken=page_token,
+                    includeItemsFromAllDrives=True,
+                    supportsAllDrives=True
+                ).execute()
 
-            files = results.get('files', [])
+                files = results.get('files', [])
+                for file in files:
+                    filename = file['name']
+                    if filename.endswith('.pdf'):
+                        page_range = filename[:-4]
+                        if re.match(r'^\d+-\d+$', page_range):
+                            pdf_links[page_range] = file['webViewLink']
 
-            for file in files:
-                filename = file['name']
-                if filename.endswith('.pdf'):
-                    page_range = filename[:-4]
-                    if re.match(r'^\d+-\d+$', page_range):
-                        pdf_links[page_range] = file['webViewLink']
+                page_token = results.get('nextPageToken')
+                if not page_token:
+                    break
 
             return pdf_links
 

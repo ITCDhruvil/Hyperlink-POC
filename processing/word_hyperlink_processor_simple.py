@@ -432,25 +432,31 @@ class WordHyperlinkProcessorSimple:
         pdf_links = {}
 
         try:
-            results = self.drive_service.service.files().list(
-                q=f"'{drive_folder_id}' in parents and mimeType='application/pdf' and trashed=false",
-                fields="files(id, name, webViewLink)",
-                pageSize=1000,
-                includeItemsFromAllDrives=True,
-                supportsAllDrives=True
-            ).execute()
+            page_token = None
+            while True:
+                results = self.drive_service.service.files().list(
+                    q=f"'{drive_folder_id}' in parents and mimeType='application/pdf' and trashed=false",
+                    fields="nextPageToken, files(id, name, webViewLink)",
+                    pageSize=1000,
+                    pageToken=page_token,
+                    includeItemsFromAllDrives=True,
+                    supportsAllDrives=True
+                ).execute()
 
-            files = results.get('files', [])
+                files = results.get('files', [])
+                for file in files:
+                    filename = file['name']
+                    if not filename.lower().endswith('.pdf'):
+                        continue
 
-            for file in files:
-                filename = file['name']
-                if not filename.lower().endswith('.pdf'):
-                    continue
+                    stem = filename[:-4]
+                    key = _normalize_page_spec(stem)
+                    if _is_page_spec(key):
+                        pdf_links[key] = file['webViewLink']
 
-                stem = filename[:-4]
-                key = _normalize_page_spec(stem)
-                if _is_page_spec(key):
-                    pdf_links[key] = file['webViewLink']
+                page_token = results.get('nextPageToken')
+                if not page_token:
+                    break
 
             return pdf_links
 

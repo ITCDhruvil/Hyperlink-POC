@@ -135,28 +135,33 @@ class WordHyperlinkProcessor:
         pdf_links = {}
 
         try:
-            # List all PDF files in the folder
-            results = self.drive_service.service.files().list(
-                q=f"'{drive_folder_id}' in parents and mimeType='application/pdf' and trashed=false",
-                fields="files(id, name, webViewLink)",
-                pageSize=1000,
-                includeItemsFromAllDrives=True,
-                supportsAllDrives=True
-            ).execute()
+            page_token = None
+            while True:
+                results = self.drive_service.service.files().list(
+                    q=f"'{drive_folder_id}' in parents and mimeType='application/pdf' and trashed=false",
+                    fields="nextPageToken, files(id, name, webViewLink)",
+                    pageSize=1000,
+                    pageToken=page_token,
+                    includeItemsFromAllDrives=True,
+                    supportsAllDrives=True
+                ).execute()
 
-            files = results.get('files', [])
+                files = results.get('files', [])
+                for file in files:
+                    filename = file['name']
 
-            for file in files:
-                filename = file['name']
+                    # Extract page range from filename
+                    # Expected format: "3-4.pdf", "12-18.pdf", etc.
+                    if filename.endswith('.pdf'):
+                        page_range = filename[:-4]  # Remove .pdf extension
 
-                # Extract page range from filename
-                # Expected format: "3-4.pdf", "12-18.pdf", etc.
-                if filename.endswith('.pdf'):
-                    page_range = filename[:-4]  # Remove .pdf extension
+                        # Validate it's a page range format (digits-digits)
+                        if re.match(r'^\d+-\d+$', page_range):
+                            pdf_links[page_range] = file['webViewLink']
 
-                    # Validate it's a page range format (digits-digits)
-                    if re.match(r'^\d+-\d+$', page_range):
-                        pdf_links[page_range] = file['webViewLink']
+                page_token = results.get('nextPageToken')
+                if not page_token:
+                    break
 
             return pdf_links
 

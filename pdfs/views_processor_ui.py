@@ -353,24 +353,37 @@ def _parse_split_groups(ranges_text: str):
 def split_pdf_document(request):
     """Upload a PDF and split it into multiple PDFs based on user-provided page ranges."""
     try:
-        if 'file' not in request.FILES:
-            return JsonResponse({'success': False, 'error': 'No file uploaded'}, status=400)
+        session_id = (request.POST.get('session_id') or '').strip()
 
-        uploaded_file = request.FILES['file']
-        if not (uploaded_file.name or '').lower().endswith('.pdf'):
-            return JsonResponse({'success': False, 'error': 'Please upload a PDF file'}, status=400)
+        input_path = None
+        should_cleanup_input = False
+
+        if 'file' in request.FILES:
+            uploaded_file = request.FILES['file']
+            if not (uploaded_file.name or '').lower().endswith('.pdf'):
+                return JsonResponse({'success': False, 'error': 'Please upload a PDF file'}, status=400)
+
+            # Save input PDF to a temp location
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as tmp:
+                for chunk in uploaded_file.chunks():
+                    tmp.write(chunk)
+                input_path = tmp.name
+            should_cleanup_input = True
+        elif session_id:
+            from django.conf import settings
+            session_pdf_path = os.path.join(settings.MEDIA_ROOT, 'processing', 'sessions', session_id, 'input.pdf')
+            if not os.path.exists(session_pdf_path):
+                return JsonResponse({'success': False, 'error': 'Original PDF for this session was not found. Please upload a PDF.'}, status=400)
+            input_path = session_pdf_path
+            should_cleanup_input = False
+        else:
+            return JsonResponse({'success': False, 'error': 'No PDF uploaded. Please upload a PDF or use an existing session.'}, status=400)
 
         page_ranges_text = request.POST.get('page_ranges', '')
         try:
             groups = _parse_split_groups(page_ranges_text)
         except ValueError as e:
             return JsonResponse({'success': False, 'error': str(e)}, status=400)
-
-        # Save input PDF to a temp location
-        with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as tmp:
-            for chunk in uploaded_file.chunks():
-                tmp.write(chunk)
-            input_path = tmp.name
 
         try:
             total_pages = get_pdf_page_count(input_path)
@@ -419,7 +432,7 @@ def split_pdf_document(request):
             })
 
         finally:
-            if os.path.exists(input_path):
+            if should_cleanup_input and input_path and os.path.exists(input_path):
                 os.unlink(input_path)
 
     except Exception as e:
@@ -777,6 +790,18 @@ def progress_generator(session_id, patient_name_override):
         drive = get_drive_service()
         uploaded_pdfs = []
 
+        yield send_progress('info', 'Uploading: original.pdf (0/{} )'.format(len(split_files)), 60)
+        original_file_id, original_web_view = drive.upload_file(
+            pdf_path,
+            drive_folder_id,
+            file_name='original.pdf'
+        )
+        original_pdf = {
+            'filename': 'original.pdf',
+            'file_id': original_file_id,
+            'webViewLink': original_web_view,
+        }
+
         for i, split_file in enumerate(split_files, 1):
             yield send_progress('info', f'Uploading: {split_file["filename"]} ({i}/{len(split_files)})', 60 + (20 * i / len(split_files)))
 
@@ -841,6 +866,7 @@ def progress_generator(session_id, patient_name_override):
                 'patient_name': patient_name_key,
                 'drive_folder_id': drive_folder_id,
                 'total_splits': len(split_files),
+                'original_pdf': original_pdf,
                 'uploaded_pdfs': uploaded_pdfs,
                 'word_result': {
                     'total_statements': result['total_statements'],

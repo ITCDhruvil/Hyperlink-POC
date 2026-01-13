@@ -423,6 +423,7 @@
                 </div>
 
                 <div class="mt-3" id="splitControls" style="display: none;">
+                    <div id="splitOriginalInfo" style="display: none; margin-bottom: 10px; padding: 10px; border: 1px solid #e5e7eb; border-radius: 8px; background: #f9fafb; color: #374151; font-size: 13px;"></div>
                     <!-- Auto-Extract Section -->
                     <div class="mb-3 p-3" style="background: #f9fafb; border-radius: 8px; border: 1px solid #e5e7eb;">
                         <label class="form-label" style="font-weight: 600; font-size: 14px; margin-bottom: 8px;">🚀 Auto-Extract (Optional)</label>
@@ -731,7 +732,6 @@
             currentMode = mode;
             currentDocumentId = null;
             currentSplitJobId = null;
-            currentSessionId = null;
             selectedFile = null;
             fileInput.value = '';
             fileInfo.style.display = 'none';
@@ -767,11 +767,22 @@
                 modeOneClick.className = 'btn btn-outline-dark';
                 modeAutoLink.className = 'btn btn-outline-dark';
                 modeSplitPdf.className = 'btn btn-dark';
-                uploadBox.style.display = 'block';
+                const hasSessionOriginal = !!currentSessionId;
+                uploadBox.style.display = hasSessionOriginal ? 'none' : 'block';
                 uploadHint.textContent = 'Drop PDF here or click to upload';
                 fileInput.accept = '.pdf';
                 splitControls.style.display = 'block';
                 splitPdfResults.style.display = 'block';
+
+                if (splitOriginalInfo) {
+                    if (hasSessionOriginal) {
+                        splitOriginalInfo.style.display = 'block';
+                        splitOriginalInfo.textContent = 'Using the original PDF from your One-Click upload. No need to upload again.';
+                    } else {
+                        splitOriginalInfo.style.display = 'none';
+                        splitOriginalInfo.textContent = '';
+                    }
+                }
             }
         }
 
@@ -870,14 +881,15 @@
         });
 
         splitBtn.addEventListener('click', () => {
-            if (!selectedFile) {
+            const hasSelectedPdf = !!selectedFile;
+            if (hasSelectedPdf) {
+                const lowerName = (selectedFile.name || '').toLowerCase();
+                if (!lowerName.endsWith('.pdf')) {
+                    alert('Please upload a .pdf file');
+                    return;
+                }
+            } else if (!currentSessionId) {
                 alert('Please upload a PDF file');
-                return;
-            }
-
-            const lowerName = (selectedFile.name || '').toLowerCase();
-            if (!lowerName.endsWith('.pdf')) {
-                alert('Please upload a .pdf file');
                 return;
             }
 
@@ -888,9 +900,16 @@
             }
 
             processingOverlay.style.display = 'flex';
+            if (!hasSelectedPdf && currentSessionId) {
+                processingText.textContent = 'Using original PDF from One-Click upload...';
+            }
 
             const formData = new FormData();
-            formData.append('file', selectedFile);
+            if (hasSelectedPdf) {
+                formData.append('file', selectedFile);
+            } else {
+                formData.append('session_id', currentSessionId);
+            }
             formData.append('page_ranges', rangesText);
 
             fetch('/split-pdf/', {
