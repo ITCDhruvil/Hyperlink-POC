@@ -4,6 +4,10 @@ Left: Upload & Display | Right: Results & Download
 """
 from django.shortcuts import render
 from django.http import JsonResponse, FileResponse
+from django.http import Http404
+from django.db.models import Avg
+from django.db.models import Count
+from django.db.models import Q
 from django.views.decorators.csrf import csrf_exempt
 from django.core.files.base import ContentFile
 from django.contrib.auth.decorators import login_required
@@ -16,18 +20,176 @@ import uuid
 import zipfile
 from datetime import datetime
 
-from .models import ProcessingHistory, FolderStructureConfig
+from .models import ProcessingHistory, FolderStructureConfig, ProcessingRun, ProcessingStep
 from processing.smart_folder_detector_configurable import SmartFolderDetectorConfigurable
 from processing.word_hyperlink_processor_simple import WordHyperlinkProcessorSimple
 from processing.pdf_utils import get_pdf_page_count, split_pdf, merge_pdf_segments
 from processing.drive_path_resolver import DrivePathResolver
 from processing.drive_utils import get_drive_service
+from processing.tasks import preflight_split_job, split_pdf_job, upload_split_job
+from .analytics_utils import get_or_create_run, start_step, finish_step, finish_run
 
 
 @login_required
 def processor_ui(request):
     """Main UI page with 2-column layout"""
     return render(request, 'pdfs/processor_ui.html')
+
+
+def _analytics_dashboard_allowed(request) -> bool:
+    email = (getattr(request.user, 'email', '') or '').strip().lower()
+    return email in {
+        'hyperlink@itcube.net',
+        'hyperlink@itcbube.net',
+    }
+
+
+def _async_capacity_allows_new_job() -> tuple[bool, dict]:
+    from django.conf import settings
+
+    max_running_total = int(getattr(settings, 'MAX_RUNNING_JOBS_TOTAL', 4) or 4)
+    max_running_async = int(getattr(settings, 'MAX_RUNNING_JOBS_ASYNC', 3) or 3)
+
+    running_total = ProcessingRun.objects.filter(status='RUNNING').count()
+    running_async = ProcessingRun.objects.filter(status='RUNNING', run_mode='ASYNC').count()
+
+    if running_total >= max_running_total or running_async >= max_running_async:
+        return False, {
+            'success': False,
+            'error': 'System is busy. Please try again in a few minutes.',
+            'busy': True,
+            'running_total': running_total,
+            'running_async': running_async,
+            'limits': {
+                'max_running_total': max_running_total,
+                'max_running_async': max_running_async,
+            }
+        }
+
+    return True, {}
+
+
+@require_http_methods(["GET"])
+@login_required
+def analytics_dashboard(request):
+    if not _analytics_dashboard_allowed(request):
+        raise Http404()
+
+    runs_qs = (
+        ProcessingRun.objects
+        .prefetch_related('steps')
+        .order_by('-started_at')
+    )
+    total_runs = runs_qs.count()
+    success_runs = runs_qs.filter(status='SUCCESS').count()
+    failed_runs = runs_qs.filter(status='FAILED').count()
+    partial_runs = runs_qs.filter(status='PARTIAL_SUCCESS').count()
+    running_runs = runs_qs.filter(status='RUNNING').count()
+
+    completed_runs_qs = runs_qs.filter(finished_at__isnull=False)
+    overall_avg_duration_ms = completed_runs_qs.aggregate(v=Avg('duration_ms')).get('v')
+    avg_duration_ms_by_mode = {
+        it['run_mode']: it['avg_ms']
+        for it in (
+            completed_runs_qs
+            .values('run_mode')
+            .annotate(avg_ms=Avg('duration_ms'), cnt=Count('id'))
+        )
+    }
+
+    step_avg_ms = {
+        it['step']: it['avg_ms']
+        for it in (
+            ProcessingStep.objects
+            .filter(run__in=completed_runs_qs, finished_at__isnull=False)
+            .values('step')
+            .annotate(avg_ms=Avg('duration_ms'), cnt=Count('id'))
+        )
+    }
+
+    recent_runs_raw = list(runs_qs[:80])
+
+    # If a job_id has both a SYNC "full" run and an ASYNC upload-only run, show only the SYNC run
+    # to avoid confusing the dashboard view.
+    best_by_job: dict[str, ProcessingRun] = {}
+    passthrough: list[ProcessingRun] = []
+    for r in recent_runs_raw:
+        jid = (r.job_id or '').strip()
+        if not jid:
+            passthrough.append(r)
+            continue
+
+        cur = best_by_job.get(jid)
+        if cur is None:
+            best_by_job[jid] = r
+            continue
+
+        # Prefer SYNC over ASYNC for same job_id, otherwise keep most recent (already sorted).
+        if cur.run_mode != 'SYNC' and r.run_mode == 'SYNC':
+            best_by_job[jid] = r
+
+    recent_runs = list(best_by_job.values()) + passthrough
+    recent_runs = sorted(recent_runs, key=lambda x: x.started_at, reverse=True)[:50]
+
+    # Derived fields for UI
+    for r in recent_runs:
+        r.duration_s = (int(r.duration_ms or 0) / 1000.0) if r.duration_ms is not None else None
+
+    context = {
+        'total_runs': total_runs,
+        'success_runs': success_runs,
+        'failed_runs': failed_runs,
+        'partial_runs': partial_runs,
+        'running_runs': running_runs,
+        'runs': recent_runs,
+        'overall_avg_duration_s': (float(overall_avg_duration_ms) / 1000.0) if overall_avg_duration_ms is not None else None,
+        'avg_duration_sync_s': (float(avg_duration_ms_by_mode.get('SYNC') or 0) / 1000.0) if avg_duration_ms_by_mode.get('SYNC') is not None else None,
+        'avg_duration_async_s': (float(avg_duration_ms_by_mode.get('ASYNC') or 0) / 1000.0) if avg_duration_ms_by_mode.get('ASYNC') is not None else None,
+        'avg_step_preflight_s': (float(step_avg_ms.get('PREFLIGHT') or 0) / 1000.0) if step_avg_ms.get('PREFLIGHT') is not None else None,
+        'avg_step_split_s': (float(step_avg_ms.get('SPLIT') or 0) / 1000.0) if step_avg_ms.get('SPLIT') is not None else None,
+        'avg_step_upload_s': (float(step_avg_ms.get('UPLOAD') or 0) / 1000.0) if step_avg_ms.get('UPLOAD') is not None else None,
+        'avg_step_word_process_s': (float(step_avg_ms.get('WORD_PROCESS') or 0) / 1000.0) if step_avg_ms.get('WORD_PROCESS') is not None else None,
+    }
+    return render(request, 'pdfs/analytics_dashboard.html', context)
+
+
+@require_http_methods(["GET"])
+@login_required
+def analytics_run_detail(request, run_id: str):
+    if not _analytics_dashboard_allowed(request):
+        raise Http404()
+
+    run = ProcessingRun.objects.filter(id=run_id).first()
+    if run is None:
+        raise Http404()
+
+    steps = list(ProcessingStep.objects.filter(run=run).order_by('started_at'))
+
+    # If the user opened an ASYNC upload-only run, also show the SYNC run's steps for the same job_id.
+    jid = (run.job_id or '').strip()
+    if jid and run.run_mode == 'ASYNC':
+        if len(steps) == 1 and steps[0].step == 'UPLOAD':
+            related_sync = (
+                ProcessingRun.objects
+                .filter(job_id=jid, run_mode='SYNC')
+                .order_by('-started_at')
+                .first()
+            )
+            if related_sync is not None:
+                sync_steps = list(ProcessingStep.objects.filter(run=related_sync).order_by('started_at'))
+                # Prefer showing SPLIT/WORD_PROCESS from SYNC, and UPLOAD from ASYNC (current run).
+                merged = [s for s in sync_steps if s.step != 'UPLOAD'] + steps
+                steps = merged
+    for s in steps:
+        s.duration_s = (int(s.duration_ms or 0) / 1000.0) if s.duration_ms is not None else None
+
+    run.duration_s = (int(run.duration_ms or 0) / 1000.0) if run.duration_ms is not None else None
+
+    context = {
+        'run': run,
+        'steps': steps,
+    }
+    return render(request, 'pdfs/analytics_run_detail.html', context)
 
 
 @require_http_methods(["GET"])
@@ -58,6 +220,7 @@ def processing_history(request):
 
     # Get statistics (respect same scope as list)
     total_documents = history_list.count()
+
     successful_documents = history_list.filter(status='SUCCESS').count()
     failed_documents = history_list.filter(status='FAILED').count()
     pending_documents = history_list.filter(status='PENDING').count()
@@ -72,6 +235,289 @@ def processing_history(request):
     }
 
     return render(request, 'pdfs/processing_history.html', context)
+
+
+@require_POST
+@csrf_exempt
+@login_required
+def start_preflight_split(request):
+    """Start an async preflight for a large PDF split job (Celery + Redis)."""
+    try:
+        allowed, payload = _async_capacity_allows_new_job()
+        if not allowed:
+            return JsonResponse(payload, status=429)
+
+        if 'file' not in request.FILES:
+            return JsonResponse({'success': False, 'error': 'No PDF uploaded. Please upload a PDF.'}, status=400)
+
+        uploaded_file = request.FILES['file']
+        if not (uploaded_file.name or '').lower().endswith('.pdf'):
+            return JsonResponse({'success': False, 'error': 'Please upload a PDF file'}, status=400)
+
+        page_ranges_text = request.POST.get('page_ranges', '')
+        patient_name = (request.POST.get('patient_name') or '').strip()
+        if not (page_ranges_text or '').strip():
+            return JsonResponse({'success': False, 'error': 'Page ranges are required'}, status=400)
+
+        from django.conf import settings
+        job_id = uuid.uuid4().hex
+        job_dir = os.path.join(settings.MEDIA_ROOT, 'processing', 'preflight', job_id)
+        os.makedirs(job_dir, exist_ok=True)
+        input_pdf_path = os.path.join(job_dir, 'input.pdf')
+
+        with open(input_pdf_path, 'wb') as f:
+            for chunk in uploaded_file.chunks():
+                f.write(chunk)
+
+        # Persist request inputs so later tasks (split/upload) can reuse them by job_id
+        import json
+        with open(os.path.join(job_dir, 'request.json'), 'w', encoding='utf-8') as f:
+            json.dump({'page_ranges': page_ranges_text, 'patient_name': patient_name}, f, ensure_ascii=False)
+
+        task = preflight_split_job.delay(job_id, input_pdf_path, page_ranges_text)
+        return JsonResponse({'success': True, 'job_id': job_id, 'task_id': task.id})
+
+    except Exception as e:
+        return JsonResponse({'success': False, 'error': str(e)}, status=500)
+
+
+@require_POST
+@csrf_exempt
+@login_required
+def retry_async_split(request, job_id: str):
+    """Retry async split for a job_id. Resumable: skips outputs already completed."""
+    try:
+        allowed, payload = _async_capacity_allows_new_job()
+        if not allowed:
+            return JsonResponse(payload, status=429)
+
+        task = split_pdf_job.delay(job_id)
+        return JsonResponse({'success': True, 'job_id': job_id, 'task_id': task.id})
+    except Exception as e:
+        return JsonResponse({'success': False, 'error': str(e)}, status=500)
+
+
+@require_POST
+@csrf_exempt
+@login_required
+def retry_async_upload(request, job_id: str):
+    """Retry async upload for a job_id. Resumable: skips files already uploaded."""
+    try:
+        allowed, payload = _async_capacity_allows_new_job()
+        if not allowed:
+            return JsonResponse(payload, status=429)
+
+        patient_name = (request.POST.get('patient_name') or '').strip()
+        if not patient_name:
+            from django.conf import settings
+            req_path = os.path.join(settings.MEDIA_ROOT, 'processing', 'preflight', job_id, 'request.json')
+            if os.path.exists(req_path):
+                import json
+                with open(req_path, 'r', encoding='utf-8') as f:
+                    req = json.load(f)
+                patient_name = (req.get('patient_name') or '').strip()
+
+        batch_size = request.POST.get('batch_size')
+        batch_size_int = int(batch_size) if batch_size and str(batch_size).isdigit() else 25
+
+        task = upload_split_job.delay(job_id, patient_name, batch_size_int)
+        return JsonResponse({'success': True, 'job_id': job_id, 'task_id': task.id})
+    except Exception as e:
+        return JsonResponse({'success': False, 'error': str(e)}, status=500)
+
+
+@require_POST
+@csrf_exempt
+@login_required
+def start_async_upload(request, job_id: str):
+    """Start async upload of split outputs to Drive for an existing job_id."""
+    try:
+        allowed, payload = _async_capacity_allows_new_job()
+        if not allowed:
+            return JsonResponse(payload, status=429)
+
+        # Prefer patient name from request (explicit), fallback to preflight request.json
+        patient_name = (request.POST.get('patient_name') or '').strip()
+        if not patient_name:
+            from django.conf import settings
+            req_path = os.path.join(settings.MEDIA_ROOT, 'processing', 'preflight', job_id, 'request.json')
+            if os.path.exists(req_path):
+                import json
+                with open(req_path, 'r', encoding='utf-8') as f:
+                    req = json.load(f)
+                patient_name = (req.get('patient_name') or '').strip()
+
+        batch_size = request.POST.get('batch_size')
+        batch_size_int = int(batch_size) if batch_size and str(batch_size).isdigit() else 25
+
+        task = upload_split_job.delay(job_id, patient_name, batch_size_int)
+        return JsonResponse({'success': True, 'job_id': job_id, 'task_id': task.id})
+    except Exception as e:
+        return JsonResponse({'success': False, 'error': str(e)}, status=500)
+
+
+@require_http_methods(["GET"])
+@login_required
+def async_upload_status(request, job_id: str):
+    """Poll status for async upload job."""
+    try:
+        from django.conf import settings
+        state_path = os.path.join(settings.MEDIA_ROOT, 'processing', 'uploads', job_id, 'state.json')
+        if not os.path.exists(state_path):
+            return JsonResponse({'success': True, 'job_id': job_id, 'status': 'PENDING'})
+
+        import json
+        with open(state_path, 'r', encoding='utf-8') as f:
+            state = json.load(f)
+
+        # If upload is running with parallel fan-out, compute live progress from per-file status JSONs.
+        if state.get('stage') == 'UPLOAD' and state.get('status') == 'RUNNING':
+            upload_dir = os.path.join(settings.MEDIA_ROOT, 'processing', 'uploads', job_id)
+            manifest_path = os.path.join(upload_dir, 'manifest.json')
+            files_dir = os.path.join(upload_dir, 'files')
+
+            total = int((state.get('counts') or {}).get('total') or 0)
+            done = 0
+            failed = 0
+
+            try:
+                if os.path.exists(manifest_path):
+                    with open(manifest_path, 'r', encoding='utf-8') as mf:
+                        manifest = json.load(mf)
+                    total = int(len(manifest.get('files') or []) or total)
+
+                if os.path.isdir(files_dir):
+                    for name in os.listdir(files_dir):
+                        if not name.lower().endswith('.json'):
+                            continue
+                        fp = os.path.join(files_dir, name)
+                        try:
+                            with open(fp, 'r', encoding='utf-8') as sf:
+                                rec = json.load(sf)
+                            if rec.get('status') == 'SUCCESS':
+                                done += 1
+                            elif rec.get('status') == 'FAILED':
+                                failed += 1
+                        except Exception:
+                            continue
+
+                state['counts'] = {'total': total, 'done': done, 'failed': failed}
+                state['progress'] = int(((done + failed) / max(1, total)) * 100)
+            except Exception:
+                pass
+
+        state['success'] = True
+        return JsonResponse(state)
+
+    except Exception as e:
+        return JsonResponse({'success': False, 'error': str(e)}, status=500)
+
+@require_POST
+@csrf_exempt
+@login_required
+def start_async_split(request, job_id: str):
+    """Start async split for an existing preflight job_id."""
+    try:
+        allowed, payload = _async_capacity_allows_new_job()
+        if not allowed:
+            return JsonResponse(payload, status=429)
+
+        task = split_pdf_job.delay(job_id)
+        return JsonResponse({'success': True, 'job_id': job_id, 'task_id': task.id})
+    except Exception as e:
+        return JsonResponse({'success': False, 'error': str(e)}, status=500)
+
+
+@require_http_methods(["GET"])
+@login_required
+def async_split_status(request, job_id: str):
+    """Poll status for async split job."""
+    try:
+        from django.conf import settings
+        state_path = os.path.join(settings.MEDIA_ROOT, 'processing', 'splits', job_id, 'state.json')
+        if not os.path.exists(state_path):
+            return JsonResponse({'success': True, 'job_id': job_id, 'status': 'PENDING'})
+
+        import json
+        with open(state_path, 'r', encoding='utf-8') as f:
+            state = json.load(f)
+
+        # If split is running in parallel fan-out mode, state.json is an orchestrator snapshot.
+        # Compute live progress by reading manifest.json and per-output status files.
+        if state.get('stage') == 'SPLIT' and state.get('status') == 'RUNNING':
+            split_dir = os.path.join(settings.MEDIA_ROOT, 'processing', 'splits', job_id)
+            manifest_path = os.path.join(split_dir, 'manifest.json')
+            output_status_dir = os.path.join(split_dir, 'output_status')
+
+            total = int((state.get('counts') or {}).get('total') or 0)
+            try:
+                if os.path.exists(manifest_path):
+                    with open(manifest_path, 'r', encoding='utf-8') as mf:
+                        manifest = json.load(mf)
+                    total = int(manifest.get('total_outputs') or total)
+                    if manifest.get('backend'):
+                        state['backend'] = manifest.get('backend')
+                    if manifest.get('total_pages') is not None:
+                        state['total_pages'] = manifest.get('total_pages')
+            except Exception:
+                pass
+
+            done = 0
+            failed = 0
+            outputs_preview = []
+
+            try:
+                if os.path.isdir(output_status_dir):
+                    files = sorted([p for p in os.listdir(output_status_dir) if p.lower().endswith('.json')])
+                    for name in files:
+                        pth = os.path.join(output_status_dir, name)
+                        try:
+                            with open(pth, 'r', encoding='utf-8') as sf:
+                                it = json.load(sf)
+                            st = it.get('status')
+                            if st == 'SUCCESS':
+                                done += 1
+                            elif st == 'FAILED':
+                                failed += 1
+                            if len(outputs_preview) < 20:
+                                outputs_preview.append(it)
+                        except Exception:
+                            continue
+            except Exception:
+                pass
+
+            if not total:
+                total = max(1, done + failed)
+
+            state['counts'] = {'total': total, 'done': done, 'failed': failed}
+            state['progress'] = int(((done + failed) / max(1, total)) * 100)
+            state['outputs_preview'] = outputs_preview
+
+        state['success'] = True
+        return JsonResponse(state)
+
+    except Exception as e:
+        return JsonResponse({'success': False, 'error': str(e)}, status=500)
+
+
+@require_http_methods(["GET"])
+@login_required
+def preflight_split_status(request, job_id: str):
+    """Poll status for a preflight split job."""
+    try:
+        from django.conf import settings
+        state_path = os.path.join(settings.MEDIA_ROOT, 'processing', 'preflight', job_id, 'state.json')
+        if not os.path.exists(state_path):
+            return JsonResponse({'success': True, 'job_id': job_id, 'status': 'PENDING'})
+
+        import json
+        with open(state_path, 'r', encoding='utf-8') as f:
+            state = json.load(f)
+        state['success'] = True
+        return JsonResponse(state)
+
+    except Exception as e:
+        return JsonResponse({'success': False, 'error': str(e)}, status=500)
 
 
 @require_POST
@@ -358,10 +804,18 @@ def split_pdf_document(request):
         input_path = None
         should_cleanup_input = False
 
+        max_bytes = 1 * 1024 * 1024 * 1024
+        max_pages = 20000
+        max_outputs = 2000
+        max_total_extracted_pages = 100000
+
         if 'file' in request.FILES:
             uploaded_file = request.FILES['file']
             if not (uploaded_file.name or '').lower().endswith('.pdf'):
                 return JsonResponse({'success': False, 'error': 'Please upload a PDF file'}, status=400)
+
+            if getattr(uploaded_file, 'size', 0) and uploaded_file.size > max_bytes:
+                return JsonResponse({'success': False, 'error': 'PDF file is too large. Maximum allowed size is 1GB.'}, status=400)
 
             # Save input PDF to a temp location
             with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as tmp:
@@ -374,6 +828,11 @@ def split_pdf_document(request):
             session_pdf_path = os.path.join(settings.MEDIA_ROOT, 'processing', 'sessions', session_id, 'input.pdf')
             if not os.path.exists(session_pdf_path):
                 return JsonResponse({'success': False, 'error': 'Original PDF for this session was not found. Please upload a PDF.'}, status=400)
+            try:
+                if os.path.getsize(session_pdf_path) > max_bytes:
+                    return JsonResponse({'success': False, 'error': 'PDF file is too large. Maximum allowed size is 1GB.'}, status=400)
+            except Exception:
+                pass
             input_path = session_pdf_path
             should_cleanup_input = False
         else:
@@ -388,16 +847,24 @@ def split_pdf_document(request):
         try:
             total_pages = get_pdf_page_count(input_path)
 
+            if total_pages > max_pages:
+                return JsonResponse({'success': False, 'error': f'PDF has too many pages ({total_pages}). Maximum allowed is {max_pages}.'}, status=400)
+
             job_id = uuid.uuid4().hex
             # Store under MEDIA_ROOT so Django can serve it if needed
             from django.conf import settings
             output_dir = os.path.join(settings.MEDIA_ROOT, 'processing', 'splits', job_id)
             os.makedirs(output_dir, exist_ok=True)
 
-            import shutil
-            original_name = 'original.pdf'
-            original_path = os.path.join(output_dir, original_name)
-            shutil.copyfile(input_path, original_path)
+            if len(groups) > max_outputs:
+                return JsonResponse({'success': False, 'error': f'Too many split outputs requested ({len(groups)}). Maximum allowed is {max_outputs}.'}, status=400)
+
+            total_extracted_pages = 0
+            for grp in groups:
+                for start, end in grp['segments']:
+                    total_extracted_pages += (end - start + 1)
+                    if total_extracted_pages > max_total_extracted_pages:
+                        return JsonResponse({'success': False, 'error': f'Too many total pages requested across splits. Maximum allowed is {max_total_extracted_pages}.'}, status=400)
 
             outputs = []
             for grp in groups:
@@ -427,7 +894,6 @@ def split_pdf_document(request):
                 'total_pages': total_pages,
                 'count': len(outputs),
                 'files': outputs,
-                'original_url': f"{settings.MEDIA_URL}processing/splits/{job_id}/{original_name}",
                 'download_all_url': f"/download-split-zip/{job_id}/"
             })
 
@@ -709,10 +1175,17 @@ def unified_process_preview(request):
         }, status=500)
 
 
-def progress_generator(session_id, patient_name_override):
+def progress_generator(session_id, patient_name_override, user=None):
     """Generator function that yields progress updates"""
     import json
     from django.conf import settings
+    from pathlib import Path
+    import time
+
+    run = None
+    split_step = None
+    upload_step = None
+    word_step = None
 
     def send_progress(status, message, progress=None):
         """Send progress update as JSON"""
@@ -743,10 +1216,35 @@ def progress_generator(session_id, patient_name_override):
         # Normalize patient name
         patient_name_key = patient_name.title().replace(' ', '_')
 
+        run = get_or_create_run(job_id=session_id, run_mode='SYNC', user=user, patient_name=patient_name_key)
+        run.input_docx_name = metadata.get('word_filename') or ''
+        run.input_pdf_name = metadata.get('pdf_filename') or ''
+        try:
+            run.input_docx_size_bytes = os.path.getsize(word_path) if word_path and os.path.exists(word_path) else None
+        except Exception:
+            run.input_docx_size_bytes = None
+        try:
+            run.input_pdf_size_bytes = os.path.getsize(pdf_path) if pdf_path and os.path.exists(pdf_path) else None
+        except Exception:
+            run.input_pdf_size_bytes = None
+        run.page_count_total = metadata.get('pdf_total_pages')
+        run.outputs_requested = len(page_ranges or [])
+        run.save(update_fields=[
+            'patient_name',
+            'input_docx_name',
+            'input_pdf_name',
+            'input_docx_size_bytes',
+            'input_pdf_size_bytes',
+            'page_count_total',
+            'outputs_requested',
+        ])
+
         yield send_progress('info', f'Patient: {patient_name_key}', 10)
 
         # Step 1: Split PDF
         yield send_progress('info', 'Preparing to split PDF...', 15)
+
+        split_step = start_step(run, 'SPLIT', extra={'session_id': session_id})
 
         split_dir = os.path.join(session_dir, 'splits')
         os.makedirs(split_dir, exist_ok=True)
@@ -771,12 +1269,18 @@ def progress_generator(session_id, patient_name_override):
 
         yield send_progress('success', f'Split complete: {len(split_files)} files created', 50)
 
+        finish_step(split_step, status='SUCCESS', count_total=len(groups), count_done=len(split_files), count_failed=0)
+
         # Step 2: Upload split PDFs to Drive
         yield send_progress('info', 'Creating patient folder in Drive...', 55)
+
+        upload_step = start_step(run, 'UPLOAD', extra={'session_id': session_id})
 
         config = FolderStructureConfig.get_active_config()
         if not config.root_folder_id:
             yield send_progress('error', 'Drive root folder ID is not configured')
+            finish_step(upload_step, status='FAILED', error_message='Drive root folder ID is not configured')
+            finish_run(run, status='FAILED', error_message='Drive root folder ID is not configured')
             return
 
         # Create patient folder
@@ -786,46 +1290,98 @@ def progress_generator(session_id, patient_name_override):
 
         if not drive_folder_id:
             yield send_progress('error', 'Failed to create patient folder in Drive')
+            finish_step(upload_step, status='FAILED', error_message='Failed to create patient folder in Drive')
+            finish_run(run, status='FAILED', error_message='Failed to create patient folder in Drive')
             return
 
         yield send_progress('success', f'Patient folder created', 60)
-        yield send_progress('info', f'Uploading {len(split_files)} PDFs to Drive...', 60)
+        yield send_progress('info', f'Uploading {len(split_files)} PDFs to Drive (parallel)...', 60)
 
-        # Upload all split PDFs
-        drive = get_drive_service()
+        # Bridge SYNC flow -> ASYNC upload pipeline:
+        # upload_split_job expects split PDFs under MEDIA_ROOT/processing/splits/<job_id>/
+        job_id = session_id
+        split_job_dir = Path(settings.MEDIA_ROOT) / 'processing' / 'splits' / job_id
+        split_job_dir.mkdir(parents=True, exist_ok=True)
+        for it in split_files:
+            try:
+                src = Path(it['path'])
+                dst = split_job_dir / src.name
+                if src.exists() and not dst.exists():
+                    import shutil
+                    shutil.copyfile(str(src), str(dst))
+            except Exception:
+                pass
+
+        from processing.tasks import upload_split_job
+        upload_split_job.delay(job_id, patient_name_key, 25)
+
+        # Poll upload state written by Celery until completion.
+        upload_state_path = Path(settings.MEDIA_ROOT) / 'processing' / 'uploads' / job_id / 'state.json'
+        upload_manifest_path = Path(settings.MEDIA_ROOT) / 'processing' / 'uploads' / job_id / 'manifest.json'
+        last_progress = -1
+        while True:
+            if upload_state_path.exists():
+                try:
+                    with open(upload_state_path, 'r', encoding='utf-8') as f:
+                        up_state = json.load(f)
+                except Exception:
+                    up_state = {}
+
+                status = (up_state.get('status') or 'RUNNING').upper()
+                progress = int(up_state.get('progress') or 0)
+                counts = up_state.get('counts') or {}
+                done = int(counts.get('done') or 0)
+                total = int(counts.get('total') or 0)
+                failed = int(counts.get('failed') or 0)
+
+                if progress != last_progress:
+                    last_progress = progress
+                    yield send_progress('info', f'Uploading to Drive: {done}/{total} done ({failed} failed)', 60 + int(20 * (progress / 100)))
+
+                if status in {'SUCCESS', 'PARTIAL_SUCCESS', 'FAILED'}:
+                    if status == 'FAILED':
+                        msg = up_state.get('error') or 'Drive upload failed'
+                        yield send_progress('error', msg)
+                        finish_step(upload_step, status='FAILED', error_message=msg)
+                        finish_run(run, status='FAILED', error_message=msg)
+                        return
+                    break
+
+            time.sleep(1.0)
+
+        # Read uploaded file results for UI output (best-effort)
         uploaded_pdfs = []
+        try:
+            upload_files_dir = Path(settings.MEDIA_ROOT) / 'processing' / 'uploads' / job_id / 'files'
+            if upload_files_dir.exists():
+                for p in sorted(upload_files_dir.iterdir()):
+                    if p.is_file() and p.suffix.lower() == '.json':
+                        try:
+                            with open(p, 'r', encoding='utf-8') as f:
+                                rec = json.load(f)
+                            if rec.get('status') == 'SUCCESS':
+                                uploaded_pdfs.append({
+                                    'filename': rec.get('filename'),
+                                    'file_id': rec.get('file_id'),
+                                    'webViewLink': rec.get('webViewLink'),
+                                })
+                        except Exception:
+                            continue
 
-        yield send_progress('info', 'Uploading: original.pdf (0/{} )'.format(len(split_files)), 60)
-        original_file_id, original_web_view = drive.upload_file(
-            pdf_path,
-            drive_folder_id,
-            file_name='original.pdf'
-        )
-        original_pdf = {
-            'filename': 'original.pdf',
-            'file_id': original_file_id,
-            'webViewLink': original_web_view,
-        }
+            if upload_manifest_path.exists():
+                with open(upload_manifest_path, 'r', encoding='utf-8') as f:
+                    manifest = json.load(f)
+                drive_folder_id = manifest.get('drive_folder_id') or drive_folder_id
+        except Exception:
+            pass
 
-        for i, split_file in enumerate(split_files, 1):
-            yield send_progress('info', f'Uploading: {split_file["filename"]} ({i}/{len(split_files)})', 60 + (20 * i / len(split_files)))
-
-            file_id, web_view = drive.upload_file(
-                split_file['path'],
-                drive_folder_id,
-                file_name=split_file['filename']
-            )
-            uploaded_pdfs.append({
-                'filename': split_file['filename'],
-                'file_id': file_id,
-                'webViewLink': web_view,
-                'label': split_file['label']
-            })
-
-        yield send_progress('success', f'All PDFs uploaded to Drive', 80)
+        yield send_progress('success', f'Upload complete (parallel)', 80)
+        finish_step(upload_step, status='SUCCESS', count_total=len(split_files), count_done=len(uploaded_pdfs), count_failed=0)
 
         # Step 3: Get PDFs from Drive folder and process Word document
         yield send_progress('info', 'Fetching PDF links from Drive...', 82)
+
+        word_step = start_step(run, 'WORD_PROCESS', extra={'session_id': session_id})
 
         processor = WordHyperlinkProcessorSimple()
         pdf_links = processor.get_pdfs_from_drive_folder(drive_folder_id)
@@ -845,6 +1401,14 @@ def progress_generator(session_id, patient_name_override):
 
         yield send_progress('success', f'Links inserted: {result["linked_statements"]}/{result["total_statements"]}', 92)
 
+        finish_step(
+            word_step,
+            status='SUCCESS',
+            count_total=int(result.get('total_statements') or 0),
+            count_done=int(result.get('linked_statements') or 0),
+            count_failed=int(result.get('unlinked_statements') or 0),
+        )
+
         # Move output to downloads location
         yield send_progress('info', 'Preparing download...', 95)
 
@@ -862,6 +1426,7 @@ def progress_generator(session_id, patient_name_override):
         download_url = f"{settings.MEDIA_URL}{relative_download_path}"
 
         # Send final result
+        original_pdf = metadata.get('pdf_filename') or (os.path.basename(pdf_path) if pdf_path else '')
         final_data = {
             'status': 'complete',
             'message': 'Processing complete!',
@@ -885,8 +1450,30 @@ def progress_generator(session_id, patient_name_override):
         }
         yield f"data: {json.dumps(final_data)}\n\n"
 
+        finish_run(
+            run,
+            status='SUCCESS',
+            extra={
+                'drive_folder_id': drive_folder_id,
+                'total_splits': len(split_files),
+                'word_result': {
+                    'total_statements': int(result.get('total_statements') or 0),
+                    'linked_statements': int(result.get('linked_statements') or 0),
+                    'unlinked_statements': int(result.get('unlinked_statements') or 0),
+                },
+            },
+        )
+
     except Exception as e:
         import traceback
+        if word_step is not None and getattr(word_step, 'status', None) == 'RUNNING':
+            finish_step(word_step, status='FAILED', error_message=str(e))
+        if upload_step is not None and getattr(upload_step, 'status', None) == 'RUNNING':
+            finish_step(upload_step, status='FAILED', error_message=str(e))
+        if split_step is not None and getattr(split_step, 'status', None) == 'RUNNING':
+            finish_step(split_step, status='FAILED', error_message=str(e))
+        if run is not None:
+            finish_run(run, status='FAILED', error_message=str(e))
         error_data = {
             'status': 'error',
             'message': f'Processing failed: {str(e)}',
@@ -917,7 +1504,7 @@ def unified_process_complete(request):
         from django.http import StreamingHttpResponse
 
         response = StreamingHttpResponse(
-            progress_generator(session_id, patient_name_override),
+            progress_generator(session_id, patient_name_override, user=request.user),
             content_type='text/event-stream'
         )
         response['Cache-Control'] = 'no-cache'

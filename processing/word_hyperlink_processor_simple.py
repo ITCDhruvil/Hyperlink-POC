@@ -538,35 +538,26 @@ class WordHyperlinkProcessorSimple:
                 run_el.insert(0, rpr)
             return rpr
 
-        def _set_bold_and_font(run_el):
+        def _set_bold_and_color(run_el):
             rpr = _ensure_rpr(run_el)
             if rpr.find(qn('w:b')) is None:
                 b = OxmlElement('w:b')
                 rpr.append(b)
 
-            rfonts = rpr.find(qn('w:rFonts'))
-            if rfonts is None:
-                rfonts = OxmlElement('w:rFonts')
-                rpr.append(rfonts)
-            rfonts.set(qn('w:ascii'), 'Times New Roman')
-            rfonts.set(qn('w:hAnsi'), 'Times New Roman')
-            rfonts.set(qn('w:eastAsia'), 'Times New Roman')
-            rfonts.set(qn('w:cs'), 'Times New Roman')
+            u = rpr.find(qn('w:u'))
+            if u is None:
+                u = OxmlElement('w:u')
+                rpr.append(u)
+            u.set(qn('w:val'), 'single')
 
-            sz = rpr.find(qn('w:sz'))
-            if sz is None:
-                sz = OxmlElement('w:sz')
-                rpr.append(sz)
-            sz.set(qn('w:val'), str(24))
-
-            szcs = rpr.find(qn('w:szCs'))
-            if szcs is None:
-                szcs = OxmlElement('w:szCs')
-                rpr.append(szcs)
-            szcs.set(qn('w:val'), str(24))
+            color = rpr.find(qn('w:color'))
+            if color is None:
+                color = OxmlElement('w:color')
+                rpr.append(color)
+            color.set(qn('w:val'), '0000FF')
 
         for r in header_runs:
-            _set_bold_and_font(r)
+            _set_bold_and_color(r)
             hyperlink.append(r)
 
         p.insert(insert_pos, hyperlink)
@@ -770,6 +761,7 @@ class WordHyperlinkProcessorSimple:
                 'drive_link': drive_link
             })
 
+        self._apply_default_font(doc, font_name='Times New Roman', font_size_pt=12)
         self._normalize_tables(doc)
         doc.save(output_docx_path)
         return stats

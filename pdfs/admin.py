@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Patient, OriginalPDF, PDFSet, DriveFolderCache, SummaryDocument
+from .models import Patient, OriginalPDF, PDFSet, DriveFolderCache, SummaryDocument, ProcessingRun, ProcessingStep
 
 @admin.register(Patient)
 class PatientAdmin(admin.ModelAdmin):
@@ -31,3 +31,17 @@ class SummaryDocumentAdmin(admin.ModelAdmin):
     list_display = ('patient', 'generated_at', 'file_path')
     search_fields = ('patient__name', 'patient__patient_id')
     list_filter = ('generated_at',)
+
+
+@admin.register(ProcessingRun)
+class ProcessingRunAdmin(admin.ModelAdmin):
+    list_display = ('run_mode', 'job_id', 'status', 'patient_name', 'started_at', 'finished_at', 'duration_ms')
+    search_fields = ('job_id', 'patient_name', 'input_pdf_name', 'input_docx_name')
+    list_filter = ('run_mode', 'status', 'started_at')
+
+
+@admin.register(ProcessingStep)
+class ProcessingStepAdmin(admin.ModelAdmin):
+    list_display = ('run', 'step', 'status', 'started_at', 'finished_at', 'duration_ms', 'count_total', 'count_done', 'count_failed')
+    search_fields = ('run__job_id', 'run__patient_name')
+    list_filter = ('step', 'status', 'started_at')

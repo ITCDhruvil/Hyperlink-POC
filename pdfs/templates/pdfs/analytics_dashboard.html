@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Analytics Dashboard - PDF Automation</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: #f9fafb;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .header {
+            background: white;
+            border-radius: 12px;
+            padding: 24px 32px;
+            margin-bottom: 24px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .header h1 {
+            font-size: 28px;
+            font-weight: 700;
+            color: #111827;
+            margin-bottom: 8px;
+        }
+
+        .header p {
+            color: #6b7280;
+            font-size: 14px;
+        }
+
+        .nav-buttons {
+            display: flex;
+            gap: 12px;
+            margin-top: 16px;
+            flex-wrap: wrap;
+        }
+
+        .nav-btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-decoration: none;
+            display: inline-block;
+        }
+
+        .nav-btn-primary {
+            background: #111827;
+            color: white;
+        }
+
+        .nav-btn-primary:hover {
+            background: #1f2937;
+            color: white;
+        }
+
+        .nav-btn-secondary {
+            background: #f3f4f6;
+            color: #374151;
+        }
+
+        .nav-btn-secondary:hover {
+            background: #e5e7eb;
+            color: #374151;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            gap: 20px;
+            margin-bottom: 24px;
+        }
+
+        .stat-card {
+            background: white;
+            border-radius: 12px;
+            padding: 24px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .stat-number {
+            font-size: 36px;
+            font-weight: 700;
+            margin-bottom: 8px;
+        }
+
+        .stat-number.total {
+            color: #6366f1;
+        }
+
+        .stat-number.success {
+            color: #16a34a;
+        }
+
+        .stat-number.failed {
+            color: #dc2626;
+        }
+
+        .stat-number.partial {
+            color: #f59e0b;
+        }
+
+        .stat-number.running {
+            color: #2563eb;
+        }
+
+        .stat-label {
+            color: #6b7280;
+            font-size: 14px;
+            font-weight: 500;
+        }
+
+        .table-card {
+            background: white;
+            border-radius: 12px;
+            padding: 24px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+        }
+
+        .table-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .table-header h2 {
+            font-size: 20px;
+            font-weight: 700;
+            color: #111827;
+            margin: 0;
+        }
+
+        .run-list {
+            list-style: none;
+            padding-left: 0;
+            margin: 0;
+        }
+
+        .run-item {
+            border-bottom: 1px solid #e5e7eb;
+            padding: 18px 0;
+            transition: background 0.2s;
+        }
+
+        .run-item:last-child {
+            border-bottom: none;
+        }
+
+        .run-item:hover {
+            background: #f9fafb;
+            margin: 0 -24px;
+            padding-left: 24px;
+            padding-right: 24px;
+        }
+
+        .item-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: start;
+            gap: 12px;
+        }
+
+        .item-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: #111827;
+            margin-bottom: 4px;
+            word-break: break-word;
+        }
+
+        .item-date {
+            font-size: 13px;
+            color: #6b7280;
+        }
+
+        .status-badge {
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+            white-space: nowrap;
+        }
+
+        .status-success {
+            background: #dcfce7;
+            color: #166534;
+        }
+
+        .status-failed {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        .status-partial_success {
+            background: #fef3c7;
+            color: #92400e;
+        }
+
+        .status-running {
+            background: #dbeafe;
+            color: #1e40af;
+        }
+
+        .item-metadata {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 12px;
+            margin-top: 12px;
+        }
+
+        .metadata-item {
+            font-size: 14px;
+        }
+
+        .metadata-label {
+            color: #6b7280;
+            font-weight: 500;
+            margin-right: 4px;
+        }
+
+        .metadata-value {
+            color: #111827;
+            font-weight: 600;
+        }
+
+        .action-btn {
+            padding: 6px 14px;
+            border: 1px solid #d1d5db;
+            border-radius: 6px;
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            background: white;
+            color: #374151;
+            transition: all 0.2s;
+            text-decoration: none;
+            display: inline-block;
+        }
+
+        .action-btn:hover {
+            background: #f3f4f6;
+            border-color: #9ca3af;
+            color: #374151;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+        }
+
+        .empty-icon {
+            font-size: 64px;
+            margin-bottom: 16px;
+        }
+
+        .empty-title {
+            font-size: 20px;
+            font-weight: 600;
+            color: #111827;
+            margin-bottom: 8px;
+        }
+
+        .empty-text {
+            color: #6b7280;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Analytics Dashboard</h1>
+            <p>Pipeline performance metrics (sync + async)</p>
+
+            <div class="nav-buttons">
+                <a href="/" class="nav-btn nav-btn-primary">Back to Processor</a>
+                <a href="/history/" class="nav-btn nav-btn-secondary">View History</a>
+                <a href="{% url 'pdfs:logout' %}" class="nav-btn nav-btn-secondary">Logout</a>
+            </div>
+        </div>
+
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-number total">{{ total_runs }}</div>
+                <div class="stat-label">Total Runs</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number success">{{ success_runs }}</div>
+                <div class="stat-label">Success</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number partial">{{ partial_runs }}</div>
+                <div class="stat-label">Partial Success</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number failed">{{ failed_runs }}</div>
+                <div class="stat-label">Failed</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number running">{{ running_runs }}</div>
+                <div class="stat-label">Running</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number" style="color:#111827;">
+                    {% if overall_avg_duration_s is not None %}{{ overall_avg_duration_s|floatformat:2 }}s{% else %}-{% endif %}
+                </div>
+                <div class="stat-label">Avg Total Time (All)</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number" style="color:#111827;">
+                    {% if avg_duration_sync_s is not None %}{{ avg_duration_sync_s|floatformat:2 }}s{% else %}-{% endif %}
+                </div>
+                <div class="stat-label">Avg Total Time (Sync)</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number" style="color:#111827;">
+                    {% if avg_duration_async_s is not None %}{{ avg_duration_async_s|floatformat:2 }}s{% else %}-{% endif %}
+                </div>
+                <div class="stat-label">Avg Total Time (Async)</div>
+            </div>
+        </div>
+
+        <div class="table-card" style="margin-bottom: 24px;">
+            <div class="table-header">
+                <h2>Average Step Times</h2>
+                <span class="stat-label">Computed from completed runs only</span>
+            </div>
+
+            <div class="item-metadata" style="margin-top: 0;">
+                <div class="metadata-item">
+                    <span class="metadata-label">Preflight:</span>
+                    <span class="metadata-value">{% if avg_step_preflight_s is not None %}{{ avg_step_preflight_s|floatformat:2 }}s{% else %}-{% endif %}</span>
+                </div>
+                <div class="metadata-item">
+                    <span class="metadata-label">Split:</span>
+                    <span class="metadata-value">{% if avg_step_split_s is not None %}{{ avg_step_split_s|floatformat:2 }}s{% else %}-{% endif %}</span>
+                </div>
+                <div class="metadata-item">
+                    <span class="metadata-label">Upload:</span>
+                    <span class="metadata-value">{% if avg_step_upload_s is not None %}{{ avg_step_upload_s|floatformat:2 }}s{% else %}-{% endif %}</span>
+                </div>
+                <div class="metadata-item">
+                    <span class="metadata-label">Word Process:</span>
+                    <span class="metadata-value">{% if avg_step_word_process_s is not None %}{{ avg_step_word_process_s|floatformat:2 }}s{% else %}-{% endif %}</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="table-card">
+            <div class="table-header">
+                <h2>Recent Runs</h2>
+                <span class="stat-label">Showing latest {{ runs|length }} runs</span>
+            </div>
+
+            {% if runs %}
+            <ul class="run-list">
+                {% for r in runs %}
+                <li class="run-item">
+                    <div class="item-header">
+                        <div>
+                            <div class="item-title">{{ r.run_mode }} | {{ r.patient_name|default:"-" }} | {{ r.job_id|default:r.id }}</div>
+                            <div class="item-date">Started {{ r.started_at|date:"M d, Y - H:i:s" }}{% if r.duration_s is not None %} • {{ r.duration_s|floatformat:2 }}s{% endif %}</div>
+                        </div>
+                        <span class="status-badge status-{{ r.status|lower }}">{{ r.status }}</span>
+                    </div>
+
+                    <div class="item-metadata">
+                        {% if r.input_docx_name %}
+                        <div class="metadata-item">
+                            <span class="metadata-label">DOCX:</span>
+                            <span class="metadata-value">{{ r.input_docx_name }}</span>
+                        </div>
+                        {% endif %}
+
+                        {% if r.input_pdf_name %}
+                        <div class="metadata-item">
+                            <span class="metadata-label">PDF:</span>
+                            <span class="metadata-value">{{ r.input_pdf_name }}</span>
+                        </div>
+                        {% endif %}
+
+                        {% if r.page_count_total %}
+                        <div class="metadata-item">
+                            <span class="metadata-label">Pages:</span>
+                            <span class="metadata-value">{{ r.page_count_total }}</span>
+                        </div>
+                        {% endif %}
+
+                        {% if r.outputs_requested %}
+                        <div class="metadata-item">
+                            <span class="metadata-label">Outputs:</span>
+                            <span class="metadata-value">{{ r.outputs_requested }}</span>
+                        </div>
+                        {% endif %}
+                    </div>
+
+                    <div style="margin-top: 12px; display:flex; gap:8px; flex-wrap: wrap;">
+                        <a class="action-btn" href="/analytics/run/{{ r.id }}/">View Details</a>
+                    </div>
+                </li>
+                {% endfor %}
+            </ul>
+            {% else %}
+            <div class="empty-state">
+                <div class="empty-icon">📊</div>
+                <div class="empty-title">No runs yet</div>
+                <div class="empty-text">Process a document to start collecting analytics.</div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

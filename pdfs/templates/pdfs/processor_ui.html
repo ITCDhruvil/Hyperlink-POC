@@ -387,6 +387,9 @@
 
                 <div class="nav-links">
                     <a href="/history/" class="nav-link-btn">View History</a>
+                    {% if user.email|lower == 'hyperlink@itcube.net' or user.email|lower == 'hyperlink@itcbube.net' %}
+                    <a href="/analytics/" class="nav-link-btn">Analytics</a>
+                    {% endif %}
                     {% if user.is_staff %}
                     <a href="/users/" class="nav-link-btn">User Management</a>
                     <a href="/drive-explorer/" class="nav-link-btn">Explore Drive</a>

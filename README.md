@@ -258,19 +258,66 @@ python manage.py createsuperuser
 
 ### 7. Start the Application
 
-**Terminal 1 - Django Server:**
-```bash
-python manage.py runserver
+#### Option A: Start everything via the batch script (Windows)
+
+```bat
+scripts\start_all.bat
 ```
 
-**Terminal 2 - Celery Worker:**
-```bash
-celery -A pdf_automation worker --loglevel=info --pool=solo
+#### Option B: Start services manually (Windows)
+
+Open **multiple PowerShell terminals** from the project root.
+
+**Terminal 0 - Activate venv + set media root (recommended for consistency):**
+```powershell
+.\venv\Scripts\activate
+$env:DJANGO_MEDIA_ROOT="D:\hyperlink_POC\Sample"
 ```
 
-**Terminal 3 - Redis (if not running as service):**
-```bash
+**Terminal 1 - Redis**
+```powershell
 redis-server
+```
+
+**Terminal 2 - Django backend**
+```powershell
+.\venv\Scripts\activate
+$env:DJANGO_MEDIA_ROOT="D:\hyperlink_POC\Sample"
+python manage.py runserver 8004
+```
+
+**Terminal 3 - Celery worker (split queue)**
+```powershell
+.\venv\Scripts\activate
+$env:DJANGO_MEDIA_ROOT="D:\hyperlink_POC\Sample"
+celery -A pdf_automation worker -l info -P solo -Q split -n split@%h
+```
+
+**Terminal 4/5/6 - Celery workers (upload queue x3 for parallel uploads)**
+```powershell
+.\venv\Scripts\activate
+$env:DJANGO_MEDIA_ROOT="D:\hyperlink_POC\Sample"
+celery -A pdf_automation worker -l info -P solo -Q upload -n upload1@%h
+```
+
+```powershell
+.\venv\Scripts\activate
+$env:DJANGO_MEDIA_ROOT="D:\hyperlink_POC\Sample"
+celery -A pdf_automation worker -l info -P solo -Q upload -n upload2@%h
+```
+
+```powershell
+.\venv\Scripts\activate
+$env:DJANGO_MEDIA_ROOT="D:\hyperlink_POC\Sample"
+celery -A pdf_automation worker -l info -P solo -Q upload -n upload3@%h
+```
+
+#### Verify Celery is connected
+
+```powershell
+.\venv\Scripts\activate
+celery -A pdf_automation inspect ping
+celery -A pdf_automation inspect active
 ```
 
 ### 8. Access the Application

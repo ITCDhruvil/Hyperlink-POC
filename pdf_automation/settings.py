@@ -148,7 +148,7 @@ STATIC_ROOT = BASE_DIR / 'staticfiles'
 
 # Media files (User uploads)
 MEDIA_URL = '/media/'
-MEDIA_ROOT = BASE_DIR / 'media'
+MEDIA_ROOT = Path(os.getenv('DJANGO_MEDIA_ROOT', str(BASE_DIR / 'media')))
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/4.2/ref/settings/#default-auto-field
@@ -160,7 +160,8 @@ GOOGLE_DRIVE_CREDENTIALS_PATH = os.getenv('GOOGLE_DRIVE_CREDENTIALS_PATH', 'cred
 GOOGLE_DRIVE_ROOT_FOLDER_ID = os.getenv('GOOGLE_DRIVE_ROOT_FOLDER_ID', '1pOaBjXnY07sQDDtym85KQVXr_Ept21Nd')
 
 # File Upload Settings
-UPLOAD_MAX_SIZE = int(os.getenv('UPLOAD_MAX_SIZE', 104857600))  # 100MB default
+# Default: 1GB (override via env UPLOAD_MAX_SIZE)
+UPLOAD_MAX_SIZE = int(os.getenv('UPLOAD_MAX_SIZE', 1 * 1024 * 1024 * 1024))
 DATA_UPLOAD_MAX_MEMORY_SIZE = UPLOAD_MAX_SIZE
 FILE_UPLOAD_MAX_MEMORY_SIZE = UPLOAD_MAX_SIZE
 
@@ -171,6 +172,30 @@ CELERY_ACCEPT_CONTENT = ['json']
 CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TIMEZONE = 'UTC'
+
+# Split tuning (recommended for typical 300-output PDFs)
+SPLIT_TASK_CHUNK_SIZE = int(os.getenv('SPLIT_TASK_CHUNK_SIZE', 25))
+
+# Celery queue routing
+# On Windows Server, run separate celery workers with --pool=solo per queue.
+CELERY_TASK_DEFAULT_QUEUE = os.getenv('CELERY_TASK_DEFAULT_QUEUE', 'default')
+CELERY_TASK_CREATE_MISSING_QUEUES = True
+
+CELERY_TASK_ROUTES = {
+    # Heavy CPU/RAM work
+    'processing.tasks.preflight_split_job': {'queue': 'split'},
+    'processing.tasks.split_pdf_job': {'queue': 'split'},
+    'processing.tasks.split_pdf_chunk_job': {'queue': 'split'},
+    'processing.tasks.finalize_split_job': {'queue': 'split'},
+
+    # Network-bound work
+    'processing.tasks.upload_split_job': {'queue': 'upload'},
+}
+
+# Backpressure (limits for concurrent running jobs)
+# These protect the server from RAM spikes when many users start jobs at once.
+MAX_RUNNING_JOBS_TOTAL = int(os.getenv('MAX_RUNNING_JOBS_TOTAL', 4))
+MAX_RUNNING_JOBS_ASYNC = int(os.getenv('MAX_RUNNING_JOBS_ASYNC', 3))
 
 # Authentication Settings
 LOGIN_URL = '/login/'

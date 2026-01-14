@@ -24,6 +24,10 @@ urlpatterns = [
     path('', views_processor_ui.processor_ui, name='index'),
     path('history/', views_processor_ui.processing_history, name='processing_history'),
 
+    # Analytics Dashboard
+    path('analytics/', views_processor_ui.analytics_dashboard, name='analytics_dashboard'),
+    path('analytics/run/<str:run_id>/', views_processor_ui.analytics_run_detail, name='analytics_run_detail'),
+
     # Drive Explorer
     path('drive-explorer/', views_drive_explorer.drive_explorer_page, name='drive_explorer_page'),
     path('api/drive/status/', views_drive_explorer.drive_status, name='api_drive_status'),
@@ -35,6 +39,14 @@ urlpatterns = [
     path('upload-document/', views_processor_ui.upload_document, name='upload_document'),
     path('process-document/<int:document_id>/', views_processor_ui.process_document, name='process_document'),
     path('download-document/<int:document_id>/', views_processor_ui.download_document, name='download_document'),
+    path('preflight-split/', views_processor_ui.start_preflight_split, name='start_preflight_split'),
+    path('preflight-split-status/<str:job_id>/', views_processor_ui.preflight_split_status, name='preflight_split_status'),
+    path('start-async-split/<str:job_id>/', views_processor_ui.start_async_split, name='start_async_split'),
+    path('async-split-status/<str:job_id>/', views_processor_ui.async_split_status, name='async_split_status'),
+    path('start-async-upload/<str:job_id>/', views_processor_ui.start_async_upload, name='start_async_upload'),
+    path('async-upload-status/<str:job_id>/', views_processor_ui.async_upload_status, name='async_upload_status'),
+    path('retry-async-split/<str:job_id>/', views_processor_ui.retry_async_split, name='retry_async_split'),
+    path('retry-async-upload/<str:job_id>/', views_processor_ui.retry_async_upload, name='retry_async_upload'),
     path('split-pdf/', views_processor_ui.split_pdf_document, name='split_pdf_document'),
     path('extract-page-ranges/', views_processor_ui.extract_page_ranges_from_word, name='extract_page_ranges'),
     path('unified-preview/', views_processor_ui.unified_process_preview, name='unified_preview'),

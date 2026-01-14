@@ -1,6 +1,7 @@
 from django.db import models
 from django.core.validators import MinValueValidator
 from django.conf import settings
+import uuid
 
 class Patient(models.Model):
     """Patient information"""
@@ -293,3 +294,114 @@ class ProcessingHistory(models.Model):
 
     def __str__(self):
         return f"{self.input_filename} - {self.status} ({self.processing_time_seconds}s)"
+
+
+class ProcessingRun(models.Model):
+    MODE_CHOICES = [
+        ('ASYNC', 'Async'),
+        ('SYNC', 'Sync'),
+    ]
+
+    STATUS_CHOICES = [
+        ('RUNNING', 'Running'),
+        ('SUCCESS', 'Success'),
+        ('PARTIAL_SUCCESS', 'Partial Success'),
+        ('FAILED', 'Failed'),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+
+    # Identifiers
+    job_id = models.CharField(max_length=64, blank=True, db_index=True)
+    run_mode = models.CharField(max_length=10, choices=MODE_CHOICES)
+
+    # Link to existing history record when applicable
+    processing_history = models.ForeignKey(
+        ProcessingHistory,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='runs',
+    )
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='processing_runs',
+    )
+
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='RUNNING')
+
+    started_at = models.DateTimeField(auto_now_add=True)
+    finished_at = models.DateTimeField(null=True, blank=True)
+    duration_ms = models.BigIntegerField(null=True, blank=True)
+
+    # High-level metadata for filtering/analysis
+    patient_name = models.CharField(max_length=255, blank=True)
+    input_pdf_name = models.CharField(max_length=500, blank=True)
+    input_pdf_size_bytes = models.BigIntegerField(null=True, blank=True)
+    input_docx_name = models.CharField(max_length=500, blank=True)
+    input_docx_size_bytes = models.BigIntegerField(null=True, blank=True)
+
+    page_count_total = models.IntegerField(null=True, blank=True)
+    outputs_requested = models.IntegerField(null=True, blank=True)
+    total_extracted_pages = models.IntegerField(null=True, blank=True)
+    split_chunk_size = models.IntegerField(null=True, blank=True)
+    split_backend = models.CharField(max_length=32, blank=True)
+
+    error_code = models.CharField(max_length=100, blank=True)
+    error_message = models.TextField(blank=True)
+
+    extra = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        ordering = ['-started_at']
+
+    def __str__(self):
+        return f"{self.run_mode} {self.job_id or self.id} - {self.status}"
+
+
+class ProcessingStep(models.Model):
+    STEP_CHOICES = [
+        ('PREFLIGHT', 'Preflight'),
+        ('SPLIT', 'Split'),
+        ('UPLOAD', 'Upload'),
+        ('WORD_PROCESS', 'Word Process'),
+    ]
+
+    STATUS_CHOICES = [
+        ('RUNNING', 'Running'),
+        ('SUCCESS', 'Success'),
+        ('PARTIAL_SUCCESS', 'Partial Success'),
+        ('FAILED', 'Failed'),
+        ('SKIPPED', 'Skipped'),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    run = models.ForeignKey(ProcessingRun, on_delete=models.CASCADE, related_name='steps')
+
+    step = models.CharField(max_length=20, choices=STEP_CHOICES)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='RUNNING')
+
+    started_at = models.DateTimeField(auto_now_add=True)
+    finished_at = models.DateTimeField(null=True, blank=True)
+    duration_ms = models.BigIntegerField(null=True, blank=True)
+
+    count_total = models.IntegerField(null=True, blank=True)
+    count_done = models.IntegerField(null=True, blank=True)
+    count_failed = models.IntegerField(null=True, blank=True)
+
+    error_code = models.CharField(max_length=100, blank=True)
+    error_message = models.TextField(blank=True)
+    extra = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        ordering = ['run', 'started_at']
+        indexes = [
+            models.Index(fields=['step', 'status']),
+        ]
+
+    def __str__(self):
+        return f"{self.run_id} {self.step} - {self.status}"
